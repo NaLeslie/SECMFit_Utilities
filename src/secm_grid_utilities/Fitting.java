@@ -16,6 +16,10 @@ public class Fitting {
         
     }
     
+    public static double findFirstK(){
+        return 2.0;
+    }
+    
     public static double nextLambda(double current_lambda){
         if(current_lambda == 0.0){
             return 1E-4;
@@ -35,14 +39,6 @@ public class Fitting {
         else {
             return 10.0*current_lambda;
         }
-    }
-    
-    public static int[] getPixels(int[][] grid, int x, int y){
-        
-    }
-    
-    public static int bestScore(int[][] grid, int[] xs, int[] ys){
-        
     }
     
 }
