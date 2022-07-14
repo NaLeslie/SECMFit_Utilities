@@ -11,7 +11,7 @@ package secm_grid_utilities;
  * Refrain from using large inputs for these operations as they do not scale well.
  * @author Nathaniel Leslie
  * Created:  2022-07-11
- * Modified: 2022-07-12
+ * Modified: 2022-07-14
  */
 public class MatrixMath {
     
@@ -73,6 +73,14 @@ public class MatrixMath {
             for(int c = 0; c < a[0].length; c++){
                 mul[r][c] = s*a[r][c];
             }
+        }
+        return mul;
+    }
+    
+    public static double[] multiply(double[] v, double s){
+        double[] mul = new double[v.length];
+        for(int i = 0; i < mul.length; i++){
+            mul[i] = v[i]*s;
         }
         return mul;
     }
