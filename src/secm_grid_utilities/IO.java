@@ -39,12 +39,12 @@ public class IO {
     public static void eraseDataFile() throws FileNotFoundException{
         File f = new File("data.txt");
         try (PrintWriter pw = new PrintWriter(f)) {
-            pw.write("%");
+            pw.print("%");
         }
     }
     
     public static void logIteration(int iteration_num, double[] diagonal, double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException{
-        File f = new File("fit.log");
+        File f = new File(LOGFILE);
         try (PrintWriter pw = new PrintWriter(f)) {
             pw.append("\nIteration: " + iteration_num);
             pw.append("\n\t Diagonal: " + diagonal[0]);
@@ -56,7 +56,7 @@ public class IO {
     }
     
     public static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException{
-        File f = new File("fit.log");
+        File f = new File(LOGFILE);
         try (PrintWriter pw = new PrintWriter(f)) {
             pw.append("\n\tLAMBDA: " + lambda);
             for(int i = 0; i < labels.length; i++){
@@ -73,7 +73,7 @@ public class IO {
     }
     
     public static void logInitialGuesses(String fname, String[] labels, double[] params, double ssr) throws FileNotFoundException{
-        File f = new File("fit.log");
+        File f = new File(LOGFILE);
         try (PrintWriter pw = new PrintWriter(f)) {
             pw.append("\nInitial guesses:");
             pw.append("\n\tFile: " + fname);
@@ -81,6 +81,20 @@ public class IO {
                 pw.append("\n\t\t" + labels[i] + ": " + params[i]);
             }
             pw.append("\n\tSum. Square Residuals: " + ssr);
+        }
+    }
+    
+    public static void logEndCondition(String fname, int condition) throws FileNotFoundException{
+        File f = new File(LOGFILE);
+        try (PrintWriter pw = new PrintWriter(f)) {
+            switch(condition){
+                case Fitting.EXECUTED_OK:
+                    pw.append("\nPROCESS CONVERGED.");
+                case Fitting.MAX_ITERATIONS_REACHED:
+                    pw.append("\nPROCESS STOPPED PREMATURELY AFTER " + Fitting.MAX_ITERATIONS + " ITERATIONS.");
+                case Fitting.MAX_LAMBDA_REACHED:
+                    pw.append("\nPROCESS STOPPED DUE TO MAXIMUM LAMBDA BEING REACHED.");
+            }
         }
     }
     
@@ -231,4 +245,17 @@ public class IO {
         return new GridData(trueimage, physicalxs, physicalys, samplexs, sampleys, min_x, min_y, grid);
         
     }
+    
+    public static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] residual) throws FileNotFoundException{
+        File f = new File(fname);
+        try (PrintWriter pw = new PrintWriter(f)) {
+            pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], residual [A]");
+            for(int i = 0; i < x.length; i ++){
+                pw.print("\n" + x[i] + "," + y[i] + "," + current[i] + "," + dl[i] + "," + dlogk[i] + "," + residual[i]);
+            }
+        }
+    }
+
+    public static final String LOGFILE = "fit.log";
+
 }

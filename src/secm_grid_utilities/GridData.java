@@ -71,7 +71,7 @@ public class GridData {
         
         ////////////////////////////////////////////////////////////////////////
         //CONVERTING (x,y) to BOUNDARIES MANY OF THESE LITERALS WILL CHANGE WHEN
-        //IF CERTAIN CHANGES ARE MADE TO THE MODEL GEOMETRY!!
+        //CERTAIN CHANGES ARE MADE TO THE MODEL GEOMETRY!!
         ////////////////////////////////////////////////////////////////////////
         int[] boundaries = new int[x_list.size()];
         for(int i = 0; i < boundaries.length; i++){

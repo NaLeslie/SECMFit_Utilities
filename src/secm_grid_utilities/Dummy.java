@@ -12,10 +12,10 @@ package secm_grid_utilities;
  * Modified: 2022-07-12
  */
 public class Dummy {
-    public static void run(double z, double logk){
+    public static void run(GridData pixels, double z, double logk, boolean testk){
         
     }
-    public static void run2(){
+    public static void run2(boolean testk){
         
     }
 }
