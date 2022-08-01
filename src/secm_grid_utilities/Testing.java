@@ -5,8 +5,11 @@
  */
 package secm_grid_utilities;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -38,12 +41,8 @@ public class Testing {
     public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
         
         try{
-            String fname = "C:\\Users\\Malak\\Documents\\NetBeansProjects\\SEM-SECM Align\\Ex\\test1.csv";
-            readSECMInfo(fname);
-            int[] coords = getCentre();
-            System.out.println(Arrays.toString(coords));
-            System.out.println("");
-            getPixels(coords[0], coords[1]);
+            readSECMInfo("Fitfile.csv");
+            runFit("yep", 1.0, -5, false);
         }
         catch(Exception e){
             e.printStackTrace();
@@ -55,7 +54,7 @@ public class Testing {
     Fitting methods and fields
     */
     
-    public static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException{
+    public static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
         double[] experimental = true_image;
         double lambda = 0;
         double ssr = 0;
@@ -65,23 +64,23 @@ public class Testing {
         double last_l;
         double last_logk;
         //first iteration
-        Model model = run(firstl, firstlogk, false);
-        run2(model, false);
-        double[] curr = readData();
-        double[] residuals = subtract(experimental, curr);
-        eraseDataFile();
+//        Model model = run(firstl, firstlogk, false);
+//        run2(model, false);
+//        double[] curr = readData();
+        double[] residuals = new double[]{-1.9589552321798752E-12, -2.3584927389365526E-12, -1.8132760702308933E-12, 7.61673315680308E-12};//subtract(experimental, curr);
+//        eraseDataFile();
         
-        model = run(firstl + L_PERTURB, firstlogk, false);
-        run2(model, false);
-        double[] curr_dl = readData();
-        double[] dl = multiply(subtract(curr_dl, curr), L_PERTURB);
-        eraseDataFile();
+//        model = run(firstl + L_PERTURB, firstlogk, false);
+//        run2(model, false);
+//        double[] curr_dl = readData();
+        double[] dl = new double[]{1.1072946570748213E-11, 1.1185454383775475E-11, 1.1195155376491125E-11, 8.602198902492968E-12};//multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
+//        eraseDataFile();
         
-        model = run(firstl, firstlogk + LOGK_PERTURB, false);
-        run2(model, false);
-        double[] curr_dk = readData();
-        double[] dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
-        eraseDataFile();
+//        model = run(firstl, firstlogk + LOGK_PERTURB, false);
+//        run2(model, false);
+        //double[] curr_dk = readData();
+        double[] dk = new double[]{6.594787540043349E-13, 1.2275589309650553E-12, 1.8225369985047264E-12, 6.619813385432342E-12};//multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
+        //eraseDataFile();
         
         double[][] J = appendColumn(dl, dk);
         double[][] JT = transpose(J);
@@ -100,12 +99,9 @@ public class Testing {
         double[][] lam_DTD = multiply(DTD, lambda);
         double[][] JTJinv = invert(add(JTJ, lam_DTD));
         double[] delta_c = multiply(multiply(JTJinv, JT), residuals);
-        last_ssr = ssr;
         ssr = sumSquare(residuals);
-        logInitialGuesses(filename, new String[]{"L", "log10k"}, new double[]{l,logk}, ssr);
-        if(verbose){
-            writeIteration("Iteration_1.txt", physical_xs, physical_ys, curr, dl, dk, residuals);
-        }
+        last_ssr = ssr;
+        
         last_l = l;
         last_logk = logk;
         l = last_l + round(delta_c[0], L_DECIMALS);
@@ -117,17 +113,14 @@ public class Testing {
         while(!converged && iterations <= MAX_ITERATIONS){
             iterations ++;
             //First lambda
-            model = run(l, logk, false);
-            run2(model, false);
-            curr = readData();
+//            model = run(l, logk, false);
+//            run2(model, false);
+            double[] curr = new double[]{2.6268131932322484E-11, 2.7279464241552293E-11, 2.8501942613472726E-11, 4.620165429883061E-11};//readData();
             residuals = subtract(experimental, curr);
-            eraseDataFile();
+//            eraseDataFile();
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
-            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1]}, lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
-            if(verbose){
-                writeIteration("Iteration_" + iterations + ".txt", physical_xs, physical_ys, curr, dl, dk, residuals);
-            }
+
             while(!lambda_ok && lambda <= MAX_LAMBDA){
                 lambda = nextLambda(lambda);
                 lam_DTD = multiply(DTD, lambda);
@@ -135,11 +128,11 @@ public class Testing {
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-                model = run(l, logk, false);
-                run2(model, false);
-                curr = readData();
+//                model = run(l, logk, false);
+//                run2(model, false);
+                curr = new double[]{2.6268131932322484E-11, 2.7279464241552293E-11, 2.8501942613472726E-11, 4.620165429883061E-11};//readData();
                 residuals = subtract(experimental, curr);
-                eraseDataFile();
+                //eraseDataFile();
                 ssr = sumSquare(residuals);
                 lambda_ok = ssr < last_ssr;
                 logLambda(lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
@@ -156,17 +149,17 @@ public class Testing {
             last_l = l;
             last_logk = logk;
             
-            model = run(firstl + L_PERTURB, firstlogk, false);
-            run2(model, false);
-            curr_dl = readData();
-            dl = multiply(subtract(curr_dl, curr), L_PERTURB);
-            eraseDataFile();
+//            model = run(firstl + L_PERTURB, firstlogk, false);
+//            run2(model, false);
+//            curr_dl = readData();
+//            dl = multiply(subtract(curr_dl, curr), L_PERTURB);
+//            eraseDataFile();
 
-            model = run(firstl, firstlogk + LOGK_PERTURB, false);
-            run2(model, false);
-            curr_dk = readData();
-            dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
-            eraseDataFile();
+//            model = run(firstl, firstlogk + LOGK_PERTURB, false);
+//            run2(model, false);
+//            curr_dk = readData();
+//            dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
+//            eraseDataFile();
 
             J = appendColumn(dl, dk);
             JT = transpose(J);
@@ -191,7 +184,7 @@ public class Testing {
         return MAX_ITERATIONS_REACHED;
     }
     
-    public static double findFirstLogK(double firstl) throws FileNotFoundException{
+    public static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException{
         //call the run method to produce a current when the electrode is at distance z and GridData.getCentre() relative to the reactive feature.
         Model model = run(firstl, 1.0, true);
         run2(model, true);
@@ -205,6 +198,9 @@ public class Testing {
                 max_derivative = derivative;
                 max_derivative_index = i;
             }
+        }
+        if(verbose){
+            
         }
         return TEST_LOG_K[max_derivative_index];
     }
@@ -242,7 +238,7 @@ public class Testing {
         return Math.rint(value*Math.pow(10, decimals))/Math.pow(10, decimals);
     }
     
-    public static final double[] TEST_LOG_K = new double[]{-8, -7, -6, -5, -4, -5, -4, -3, -2, -1, 0, 1};
+    public static final double[] TEST_LOG_K = new double[]{-8, -7, -6, -5, -4, -3, -2, -1, 0, 1};
     
     public static final int MAX_ITERATIONS = 15;
     
@@ -294,8 +290,8 @@ public class Testing {
             ymax = grid[0].length + halfsizey - gridy;
         }
         
-        LinkedList<Integer> x_list = new LinkedList<>();
-        LinkedList<Integer> y_list = new LinkedList<>();
+        LinkedList<Integer> x_list = new LinkedList<Integer>();
+        LinkedList<Integer> y_list = new LinkedList<Integer>();
         
         for(int ix = xmin; ix < xmax; ix++){
             int xindex = ix - halfsizex + gridx;
@@ -430,9 +426,9 @@ public class Testing {
         pw.close();
     }
     
-    public static void logIteration(int iteration_num, double[] diagonal, double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException{
+    public static void logIteration(int iteration_num, double[] diagonal, double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
-        PrintWriter pw = new PrintWriter(f);
+        PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             pw.append("\nIteration: " + iteration_num);
             pw.append("\n\t Diagonal: " + diagonal[0]);
             for(int i = 1; i < labels.length; i++){
@@ -442,9 +438,9 @@ public class Testing {
         logLambda(lambda, labels, params, ssr, accepted);
     }
     
-    public static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException{
+    public static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
-        PrintWriter pw = new PrintWriter(f);
+        PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             pw.append("\n\tLAMBDA: " + lambda);
             for(int i = 0; i < labels.length; i++){
                 pw.append("\n\t\t" + labels[i] + ": " + params[i]);
@@ -459,7 +455,7 @@ public class Testing {
         pw.close();
     }
     
-    public static void logInitialGuesses(String fname, String[] labels, double[] params, double ssr) throws FileNotFoundException{
+    public static void logInitialGuesses(String fname, String[] labels, double[] params, double ssr) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(f);
             pw.append("\nInitial guesses:");
@@ -471,9 +467,9 @@ public class Testing {
         pw.close();
     }
     
-    public static void logEndCondition(String fname, int condition) throws FileNotFoundException{
+    public static void logEndCondition(int condition) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
-        PrintWriter pw = new PrintWriter(f);
+        PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             switch(condition){
                 case EXECUTED_OK:
                     pw.append("\nPROCESS CONVERGED.");
@@ -482,6 +478,57 @@ public class Testing {
                 case MAX_LAMBDA_REACHED:
                     pw.append("\nPROCESS STOPPED DUE TO MAXIMUM LAMBDA BEING REACHED.");
             }
+        pw.close();
+    }
+    
+    public static void writeSECMInfo(String original_filepath, String new_filepath) throws FileNotFoundException, IOException{
+        File originalfile = new File(original_filepath);
+        File newfile = new File(new_filepath);
+        Scanner s = new Scanner(originalfile);
+        PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(newfile)));
+        int index = 0;
+        String sep = ",";
+        
+        if(s.hasNextLine()){
+            String fl = s.nextLine();
+            pw.print(fl);
+            if(fl.equalsIgnoreCase("##ENCODING: csv")){
+                sep = ",";
+            }
+            else if(fl.equalsIgnoreCase("##ENCODING: tsv")){
+                sep = "\t";
+            }
+            else{
+                throw new FileNotFoundException("File incorrectly formatted.");
+            }
+        }
+        else{
+            throw new FileNotFoundException("File incorrectly formatted.");
+        }
+        
+        while(s.hasNextLine()){
+            String line = s.nextLine();
+            if(!line.startsWith("#")){
+                String[] linesplit = line.split(sep);
+                int x = Integer.parseInt(linesplit[0]);
+                int y = Integer.parseInt(linesplit[1]);
+                if(x == sample_xs[index] && y == sample_ys[index]){
+                    pw.print("\n" + linesplit[0] + sep + linesplit[1] + sep + linesplit[2] + sep + linesplit[3] + sep + linesplit[4] + sep + true_image[index]);
+                    index ++;
+                    if(index >= sample_xs.length){
+                        index = sample_xs.length - 1;
+                    }
+                }
+                else{
+                    pw.print("\n" + line);
+                }
+            }
+            else{
+                pw.print("\n" + line);
+            }
+        }
+        
+        s.close();
         pw.close();
     }
     
@@ -650,6 +697,16 @@ public class Testing {
         pw.close();
     }
 
+    public static void writeKFit(String fname, double[] current) throws FileNotFoundException{
+        File f = new File(fname);
+        PrintWriter pw = new PrintWriter(f);
+            pw.print("#log10(k/1[m/s]), i [A]");
+            for(int i = 0; i < current.length; i ++){
+                pw.print("\n" + TEST_LOG_K[i] + "," + current[i]);
+            }
+        pw.close();
+    }
+    
     public static final String LOGFILE = "fit.log";
     
     
@@ -856,6 +913,9 @@ public class Testing {
     private static double inner_determinant(double[][] a){
         if(a.length == 2){//2x2 matrix
             return a[0][0]*a[1][1] - a[0][1]*a[1][0];
+        }
+        else if(a.length == 1){//1x1 matrix
+            return a[0][0];
         }
         else{
             double sum = 0;
