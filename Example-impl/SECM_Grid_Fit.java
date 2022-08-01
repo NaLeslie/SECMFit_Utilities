@@ -4,6 +4,7 @@
 
 import com.comsol.model.*;
 import com.comsol.model.util.*;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
@@ -315,16 +316,75 @@ public class SECM_Grid_Fit {
   public static void main(String[] args) {
 	  System.out.println("start");
     try{
-		eraseDataFile();
-		String filename = "Fitfile.csv";
+//		eraseDataFile();
+//		String filename = "Fitfile.csv";
 	
-		double L = 1.0;//Normalized tip-to-substrate distance
-		readSECMInfo(filename);
-		System.out.println("Grid data read");
-		double k = -5;//findFirstLogK(L);
-		System.out.println("initial log10k: " + k);
-		int result = runFit(filename, L, k, true);
-		logEndCondition(result);
+//		double L = 1.0;//Normalized tip-to-substrate distance
+//		readSECMInfo(filename);
+//		System.out.println("Grid data read");
+//		double k = -5;//findFirstLogK(L);
+//		System.out.println("initial log10k: " + k);
+//		int result = runFit(filename, L, k, true);
+//		logEndCondition(result);
+		
+		
+		eraseDataFile();
+		String filename = "sm_original.csv";
+		String newfile = "true-6.csv";
+		Model model = run(1.0, -6, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-5.csv";
+		model = run(1.0, -5, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-4.csv";
+		model = run(1.0, -4, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-3.csv";
+		model = run(1.0, -3, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true0.csv";
+		model = run(1.0, 0, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-3554.csv";
+		model = run(1.0, -3.554, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-5569.csv";
+		model = run(1.0, -5.569, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
+		
+		newfile = "true-5119.csv";
+		model = run(1.0, -5.119, false);
+        run2(model, false);
+		true_image = readData();
+		writeSECMInfo(filename, newfile);
+		eraseDataFile();
 	}
 	catch(Exception e){
 		e.printStackTrace();
@@ -813,6 +873,57 @@ public class SECM_Grid_Fit {
         pw.close();
     }
     
+	public static void writeSECMInfo(String original_filepath, String new_filepath) throws FileNotFoundException, IOException{
+        File originalfile = new File(original_filepath);
+        File newfile = new File(new_filepath);
+        Scanner s = new Scanner(originalfile);
+        PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(newfile)));
+        int index = 0;
+        String sep = ",";
+        
+        if(s.hasNextLine()){
+            String fl = s.nextLine();
+            pw.print(fl);
+            if(fl.equalsIgnoreCase("##ENCODING: csv")){
+                sep = ",";
+            }
+            else if(fl.equalsIgnoreCase("##ENCODING: tsv")){
+                sep = "\t";
+            }
+            else{
+                throw new FileNotFoundException("File incorrectly formatted.");
+            }
+        }
+        else{
+            throw new FileNotFoundException("File incorrectly formatted.");
+        }
+        
+        while(s.hasNextLine()){
+            String line = s.nextLine();
+            if(!line.startsWith("#")){
+                String[] linesplit = line.split(sep);
+                int x = Integer.parseInt(linesplit[0]);
+                int y = Integer.parseInt(linesplit[1]);
+                if(x == sample_xs[index] && y == sample_ys[index]){
+                    pw.print("\n" + linesplit[0] + sep + linesplit[1] + sep + linesplit[2] + sep + linesplit[3] + sep + linesplit[4] + sep + true_image[index]);
+                    index ++;
+                    if(index >= sample_xs.length){
+                        index = sample_xs.length - 1;
+                    }
+                }
+                else{
+                    pw.print("\n" + line);
+                }
+            }
+            else{
+                pw.print("\n" + line);
+            }
+        }
+        
+        s.close();
+        pw.close();
+    }
+	
     public static void readSECMInfo(String filepath) throws FileNotFoundException{
         File f = new File(filepath);
         
