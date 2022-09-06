@@ -9,4 +9,4 @@ Utility methods for fitting arbitrary SECM features
 ## Operating systems:
 - `/Example-impl/run.bat` will compile and run the simulation on Windows machines.
 - On Windows systems, `C:\Program Files\COMSOL\COMSOL60\Multiphysics\bin\win64` must be added to the `PATH` environment variable.
-- The comsol compiler has a different name in Linux systems
+- The comsol compiler has a different name in Unix-based systems
