@@ -200,7 +200,7 @@ public class Testing {
             }
         }
         if(verbose){
-            
+            writeKFit(KLOGFILE, curr);
         }
         return TEST_LOG_K[max_derivative_index];
     }
@@ -708,6 +708,8 @@ public class Testing {
     }
     
     public static final String LOGFILE = "fit.log";
+    
+    public static final String KLOGFILE = "k-curve.csv";
     
     
     /*
