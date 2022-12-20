@@ -536,13 +536,13 @@ public class SECM_Grid_Fit {
             last_l = l;
             last_logk = logk;
             
-            model = run(firstl + L_PERTURB, firstlogk, false);
+            model = run(l + L_PERTURB, logk, false);
             run2(model, false);
             curr_dl = readData();
             dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
             eraseDataFile();
 
-            model = run(firstl, firstlogk + LOGK_PERTURB, false);
+            model = run(l, logk + LOGK_PERTURB, false);
             run2(model, false);
             curr_dk = readData();
             dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
