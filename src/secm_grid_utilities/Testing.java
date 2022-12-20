@@ -17,7 +17,7 @@ import java.util.Scanner;
 
 /**
  *
- * @author Malak
+ * @author Nathaniel
  */
 public class Testing {
 
@@ -64,23 +64,23 @@ public class Testing {
         double last_l;
         double last_logk;
         //first iteration
-//        Model model = run(firstl, firstlogk, false);
-//        run2(model, false);
-//        double[] curr = readData();
-        double[] residuals = new double[]{-1.9589552321798752E-12, -2.3584927389365526E-12, -1.8132760702308933E-12, 7.61673315680308E-12};//subtract(experimental, curr);
-//        eraseDataFile();
+        Model model = run(firstl, firstlogk, false);
+        run2(model, false);
+        double[] curr = readData();
+        double[] residuals = subtract(experimental, curr);
+        eraseDataFile();
         
-//        model = run(firstl + L_PERTURB, firstlogk, false);
-//        run2(model, false);
-//        double[] curr_dl = readData();
-        double[] dl = new double[]{1.1072946570748213E-11, 1.1185454383775475E-11, 1.1195155376491125E-11, 8.602198902492968E-12};//multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
-//        eraseDataFile();
+        model = run(firstl + L_PERTURB, firstlogk, false);
+        run2(model, false);
+        double[] curr_dl = readData();
+        double[] dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
+        eraseDataFile();
         
-//        model = run(firstl, firstlogk + LOGK_PERTURB, false);
-//        run2(model, false);
-        //double[] curr_dk = readData();
-        double[] dk = new double[]{6.594787540043349E-13, 1.2275589309650553E-12, 1.8225369985047264E-12, 6.619813385432342E-12};//multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
-        //eraseDataFile();
+        model = run(firstl, firstlogk + LOGK_PERTURB, false);
+        run2(model, false);
+        double[] curr_dk = readData();
+        double[] dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
+        eraseDataFile();
         
         double[][] J = appendColumn(dl, dk);
         double[][] JT = transpose(J);
@@ -113,11 +113,11 @@ public class Testing {
         while(!converged && iterations <= MAX_ITERATIONS){
             iterations ++;
             //First lambda
-//            model = run(l, logk, false);
-//            run2(model, false);
-            double[] curr = new double[]{2.6268131932322484E-11, 2.7279464241552293E-11, 2.8501942613472726E-11, 4.620165429883061E-11};//readData();
+            model = run(l, logk, false);
+            run2(model, false);
+            curr = readData();
             residuals = subtract(experimental, curr);
-//            eraseDataFile();
+            eraseDataFile();
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
 
@@ -128,11 +128,11 @@ public class Testing {
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-//                model = run(l, logk, false);
-//                run2(model, false);
-                curr = new double[]{2.6268131932322484E-11, 2.7279464241552293E-11, 2.8501942613472726E-11, 4.620165429883061E-11};//readData();
+                model = run(l, logk, false);
+                run2(model, false);
+                curr = readData();
                 residuals = subtract(experimental, curr);
-                //eraseDataFile();
+                eraseDataFile();
                 ssr = sumSquare(residuals);
                 lambda_ok = ssr < last_ssr;
                 logLambda(lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
@@ -149,17 +149,17 @@ public class Testing {
             last_l = l;
             last_logk = logk;
             
-//            model = run(firstl + L_PERTURB, firstlogk, false);
-//            run2(model, false);
-//            curr_dl = readData();
-//            dl = multiply(subtract(curr_dl, curr), L_PERTURB);
-//            eraseDataFile();
+            model = run(l + L_PERTURB, logk, false);
+            run2(model, false);
+            curr_dl = readData();
+            dl = multiply(subtract(curr_dl, curr), L_PERTURB);
+            eraseDataFile();
 
-//            model = run(firstl, firstlogk + LOGK_PERTURB, false);
-//            run2(model, false);
-//            curr_dk = readData();
-//            dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
-//            eraseDataFile();
+            model = run(l, logk + LOGK_PERTURB, false);
+            run2(model, false);
+            curr_dk = readData();
+            dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
+            eraseDataFile();
 
             J = appendColumn(dl, dk);
             JT = transpose(J);
