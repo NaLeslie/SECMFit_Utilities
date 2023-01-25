@@ -148,11 +148,29 @@ public class Testing {
             last_l = l;
             last_logk = logk;
             
-            curr_dl = runModel(l + L_PERTURB, logk);
-            dl = multiply(subtract(curr_dl, curr), L_PERTURB);
+            int query = checkList(l - L_PERTURB, logk);
+            if(query == -1){
+                curr_dl = runModel(l + L_PERTURB, logk);
+                dl = multiply(subtract(curr_dl, curr), L_PERTURB);
+            }
+            else{
+                curr_dl = convertToRegularDouble(list_data.get(query));
+                //NOTE: this curr_dl is effectively simulated as being perturbed negatively
+                dl = multiply(subtract(curr_dl, curr), -L_PERTURB);
+            }
+            
 
-            curr_dk = runModel(l, logk + LOGK_PERTURB);
-            dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
+            query = checkList(l, logk - LOGK_PERTURB);
+            if(query == -1){
+                curr_dk = runModel(l, logk + LOGK_PERTURB);
+                dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
+            }
+            else{
+                curr_dk = convertToRegularDouble(list_data.get(query));
+                //NOTE: this curr_dk is effectively simulated as being perturbed negatively
+                dk = multiply(subtract(curr_dk, curr), -LOGK_PERTURB);
+            }
+            
 
             J = appendColumn(dl, dk);
             JT = transpose(J);
@@ -178,27 +196,29 @@ public class Testing {
     }
     
     static double[] runModel(double l, double logk) throws FileNotFoundException{
-        double[] data = checkList(l, logk);
-        if(data.length == DUMMY.length){
+        int index = checkList(l, logk);
+        if(index == -1){
             Model temp = run(l, logk, false);
             run2(temp, false);
-            data = readData();
+            double[] data = readData();
             eraseDataFile();
             addToList(l, logk, data);
+            return data;
         }
-        return data;
+        else{
+            return convertToRegularDouble(list_data.get(index));
+        }
     }
     
-    static double[] checkList(double l, double logk){
-        double[] result = DUMMY;
+    static int checkList(double l, double logk){
         for(int i = 0; i < list_l.size(); i++){
             boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
             boolean logkeq = precisionEquals(l, list_logk.get(i), LOGK_DECIMALS);
             if(leq && logkeq){
-                return convertToRegularDouble(list_data.get(i));
+                return i;
             }
         }
-        return result;
+        return -1;
     }
     
     static void addToList(double l, double logk, double[] data){
@@ -332,9 +352,17 @@ public class Testing {
     
     static final double[] DUMMY = new double[]{0};
     
+    /*
+    Lists for storing simulation history (to avoid redundant simulations)
+    */
+    
     static LinkedList<Double> list_l;
     static LinkedList<Double> list_logk;
     static LinkedList<Double[]> list_data;
+    
+    /*
+    Fitting status symbols
+    */
     
     static final int EXECUTED_OK = 0;
     static final int MAX_ITERATIONS_REACHED = 1;
