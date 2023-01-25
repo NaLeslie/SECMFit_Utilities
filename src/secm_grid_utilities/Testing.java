@@ -28,7 +28,7 @@ public class Testing {
      * @param testk
      * @return 
      */
-    static Model run(double z, double logk, boolean testk){
+    static Model run(double l, double logk, boolean testk){
         return new Model();
     }
     static Model run2(Model model, boolean testk){
@@ -39,7 +39,9 @@ public class Testing {
      * @param args the command line arguments
      */
     public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
-        
+        list_l = new LinkedList<Double>();
+        list_logk = new LinkedList<Double>();
+        list_data = new LinkedList<Double[]>();
         try{
             readSECMInfo("Fitfile.csv");
             runFit("yep", 1.0, -5, false);
@@ -54,7 +56,7 @@ public class Testing {
     Fitting methods and fields
     */
     
-    public static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
+    static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
         double[] experimental = true_image;
         double lambda = 0;
         double ssr = 0;
@@ -64,23 +66,14 @@ public class Testing {
         double last_l;
         double last_logk;
         //first iteration
-        Model model = run(firstl, firstlogk, false);
-        run2(model, false);
-        double[] curr = readData();
+        double[] curr = runModel(firstl, firstlogk);
         double[] residuals = subtract(experimental, curr);
-        eraseDataFile();
         
-        model = run(firstl + L_PERTURB, firstlogk, false);
-        run2(model, false);
-        double[] curr_dl = readData();
+        double[] curr_dl = runModel(firstl + L_PERTURB, firstlogk);
         double[] dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
-        eraseDataFile();
         
-        model = run(firstl, firstlogk + LOGK_PERTURB, false);
-        run2(model, false);
-        double[] curr_dk = readData();
+        double[] curr_dk = runModel(firstl, firstlogk + LOGK_PERTURB);
         double[] dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
-        eraseDataFile();
         
         double[][] J = appendColumn(dl, dk);
         double[][] JT = transpose(J);
@@ -113,11 +106,8 @@ public class Testing {
         while(!converged && iterations <= MAX_ITERATIONS){
             iterations ++;
             //First lambda
-            model = run(l, logk, false);
-            run2(model, false);
-            curr = readData();
+            curr = runModel(l, logk);
             residuals = subtract(experimental, curr);
-            eraseDataFile();
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
 
@@ -128,11 +118,8 @@ public class Testing {
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-                model = run(l, logk, false);
-                run2(model, false);
-                curr = readData();
+                curr = runModel(l, logk);
                 residuals = subtract(experimental, curr);
-                eraseDataFile();
                 ssr = sumSquare(residuals);
                 lambda_ok = ssr < last_ssr;
                 logLambda(lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
@@ -145,21 +132,27 @@ public class Testing {
             if(!lambda_ok){
                 return MAX_LAMBDA_REACHED;
             }
+            if(iterations >= MAX_ITERATIONS){
+                return MAX_ITERATIONS_REACHED;
+            }
+            //Experimental: (use the set of parameters with the lowest residuals to-date)
+            int lowest_sim = findLowestSSR();
+            curr = convertToRegularDouble(list_data.get(lowest_sim));
+            residuals = subtract(experimental, curr);
+            ssr = sumSquare(residuals);
+            l = list_l.get(lowest_sim);
+            logk = list_logk.get(lowest_sim);
+            //end of Experimental bit
+            
             last_ssr = ssr;
             last_l = l;
             last_logk = logk;
             
-            model = run(l + L_PERTURB, logk, false);
-            run2(model, false);
-            curr_dl = readData();
+            curr_dl = runModel(l + L_PERTURB, logk);
             dl = multiply(subtract(curr_dl, curr), L_PERTURB);
-            eraseDataFile();
 
-            model = run(l, logk + LOGK_PERTURB, false);
-            run2(model, false);
-            curr_dk = readData();
+            curr_dk = runModel(l, logk + LOGK_PERTURB);
             dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
-            eraseDataFile();
 
             J = appendColumn(dl, dk);
             JT = transpose(J);
@@ -184,7 +177,66 @@ public class Testing {
         return MAX_ITERATIONS_REACHED;
     }
     
-    public static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException{
+    static double[] runModel(double l, double logk) throws FileNotFoundException{
+        double[] data = checkList(l, logk);
+        if(data.length == DUMMY.length){
+            Model temp = run(l, logk, false);
+            run2(temp, false);
+            data = readData();
+            eraseDataFile();
+            addToList(l, logk, data);
+        }
+        return data;
+    }
+    
+    double[] checkList(double l, double logk){
+        double[] result = DUMMY;
+        for(int i = 0; i < list_l.size(); i++){
+            boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
+            boolean logkeq = precisionEquals(l, list_logk.get(i), LOGK_DECIMALS);
+            if(leq && logkeq){
+                return convertToRegularDouble(list_data.get(i));
+            }
+        }
+        return result;
+    }
+    
+    static void addToList(double l, double logk, double[] data){
+        Double dl = l;
+        Double dlogk = logk;
+        Double[] ddata = convertToClassDouble(data);
+        list_l.add(dl);
+        list_logk.add(dlogk);
+        list_data.add(ddata);
+    }
+    
+    static Double[] convertToClassDouble(double[] input){
+        int len = input.length;
+        Double[] output = new Double[len];
+        for(int i = 0; i < len; i++){
+            output[i] = input[i];
+        }
+        return output;
+    }
+    
+    static double[] convertToRegularDouble(Double[] input){
+        int len = input.length;
+        double[] output = new double[len];
+        for(int i = 0; i < len; i++){
+            output[i] = (double)input[i];
+        }
+        return output;
+    }
+    
+    static boolean precisionEquals(double d1, Double cd2, int decimals){
+        double d2 = (double)cd2;
+        double factor = Math.pow(10, decimals);
+        double difference = Math.abs(d1 - d2);
+        long rounded_difference = Math.round(difference*factor);
+        return rounded_difference == 0;
+    }
+    
+    static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException{
         //call the run method to produce a current when the electrode is at distance z and GridData.getCentre() relative to the reactive feature.
         Model model = run(firstl, 1.0, true);
         run2(model, true);
@@ -205,7 +257,7 @@ public class Testing {
         return TEST_LOG_K[max_derivative_index];
     }
     
-    public static double nextLambda(double current_lambda){
+    static double nextLambda(double current_lambda){
         if(current_lambda == 0.0){
             return 1E-4;
         }
@@ -226,7 +278,7 @@ public class Testing {
         }
     }
     
-    private static double sumSquare(double[] residuals){
+    static double sumSquare(double[] residuals){
         double sum = 0;
         for(double r : residuals){
             sum += r*r;
@@ -234,27 +286,59 @@ public class Testing {
         return sum;
     }
     
-    private static double round(double value, int decimals){
+    static double round(double value, int decimals){
         return Math.rint(value*Math.pow(10, decimals))/Math.pow(10, decimals);
     }
     
-    public static final double[] TEST_LOG_K = new double[]{-8, -7, -6, -5, -4, -3, -2, -1, 0, 1};
+    static int findLowestSSR(){
+        if(list_l.isEmpty()){
+            return -1;
+        }
+        double[] experimental = true_image;
+        int len = list_l.size();
+        int low_index = len - 1;
+        double[] curr = convertToRegularDouble(list_data.get(low_index));
+        double[] residuals = subtract(experimental, curr);
+        double low_ssr = sumSquare(residuals);
+        for(int i = 0; i < len; i++){
+            curr = convertToRegularDouble(list_data.get(i));
+            residuals = subtract(experimental, curr);
+            double ssr = sumSquare(residuals);
+            if(ssr < low_ssr){
+                low_index = i;
+                low_ssr = ssr;
+            }
+        }
+        return low_index;
+    }
     
-    public static final int MAX_ITERATIONS = 15;
+    ////////////////////////////////////////////////////////////////////////////
+    // CONSTANTS FOR FITTING ///////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
     
-    public static final double MAX_LAMBDA = 100.0;
+    static final double[] TEST_LOG_K = new double[]{-8, -7, -6, -5, -4, -3, -2, -1, 0, 1};
     
-    public static final int L_DECIMALS = 2;//in [um]
+    static final int MAX_ITERATIONS = 15;
     
-    public static final double L_PERTURB = 0.05;//in [um]
+    static final double MAX_LAMBDA = 100.0;
     
-    public static final int LOGK_DECIMALS = 3;//[k] = [m/s]
+    static final int L_DECIMALS = 2;//in [um]
     
-    public static final double LOGK_PERTURB = 0.001;//[k] = [m/s]
+    static final double L_PERTURB = 0.05;//in [um]
     
-    public static final int EXECUTED_OK = 0;
-    public static final int MAX_ITERATIONS_REACHED = 1;
-    public static final int MAX_LAMBDA_REACHED = 2;
+    static final int LOGK_DECIMALS = 3;//[k] = [m/s]
+    
+    static final double LOGK_PERTURB = 0.001;//[k] = [m/s]
+    
+    static final double[] DUMMY = new double[]{0};
+    
+    static LinkedList<Double> list_l;
+    static LinkedList<Double> list_logk;
+    static LinkedList<Double[]> list_data;
+    
+    static final int EXECUTED_OK = 0;
+    static final int MAX_ITERATIONS_REACHED = 1;
+    static final int MAX_LAMBDA_REACHED = 2;
     
     
     /*
@@ -395,7 +479,7 @@ public class Testing {
     IO-handling methods and fields
     */
     
-    public static double[] readData() throws FileNotFoundException{
+    static double[] readData() throws FileNotFoundException{
         File f = new File("data.txt");
         Scanner s = new Scanner(f);
         int count = 0;
@@ -419,14 +503,14 @@ public class Testing {
         return data;
     }
     
-    public static void eraseDataFile() throws FileNotFoundException{
+    static void eraseDataFile() throws FileNotFoundException{
         File f = new File("data.txt");
         PrintWriter pw = new PrintWriter(f);
             pw.print("%");
         pw.close();
     }
     
-    public static void logIteration(int iteration_num, double[] diagonal, double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
+    static void logIteration(int iteration_num, double[] diagonal, double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             pw.append("\nIteration: " + iteration_num);
@@ -438,7 +522,7 @@ public class Testing {
         logLambda(lambda, labels, params, ssr, accepted);
     }
     
-    public static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
+    static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             pw.append("\n\tLAMBDA: " + lambda);
@@ -455,7 +539,7 @@ public class Testing {
         pw.close();
     }
     
-    public static void logInitialGuesses(String fname, String[] labels, double[] params, double ssr) throws FileNotFoundException, IOException{
+    static void logInitialGuesses(String fname, String[] labels, double[] params, double ssr) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(f);
             pw.append("\nInitial guesses:");
@@ -467,7 +551,7 @@ public class Testing {
         pw.close();
     }
     
-    public static void logEndCondition(int condition) throws FileNotFoundException, IOException{
+    static void logEndCondition(int condition) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(new FileWriter(f, true));
             switch(condition){
@@ -481,7 +565,7 @@ public class Testing {
         pw.close();
     }
     
-    public static void writeSECMInfo(String original_filepath, String new_filepath) throws FileNotFoundException, IOException{
+    static void writeSECMInfo(String original_filepath, String new_filepath) throws FileNotFoundException, IOException{
         File originalfile = new File(original_filepath);
         File newfile = new File(new_filepath);
         Scanner s = new Scanner(originalfile);
@@ -532,7 +616,7 @@ public class Testing {
         pw.close();
     }
     
-    public static void readSECMInfo(String filepath) throws FileNotFoundException{
+    static void readSECMInfo(String filepath) throws FileNotFoundException{
         File f = new File(filepath);
         
         int minx = 0;
@@ -687,7 +771,7 @@ public class Testing {
         
     }
     
-    public static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] residual) throws FileNotFoundException{
+    static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] residual) throws FileNotFoundException{
         File f = new File(fname);
         PrintWriter pw = new PrintWriter(f);
             pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], residual [A]");
@@ -697,7 +781,7 @@ public class Testing {
         pw.close();
     }
 
-    public static void writeKFit(String fname, double[] current) throws FileNotFoundException{
+    static void writeKFit(String fname, double[] current) throws FileNotFoundException{
         File f = new File(fname);
         PrintWriter pw = new PrintWriter(f);
             pw.print("#log10(k/1[m/s]), i [A]");
@@ -707,9 +791,9 @@ public class Testing {
         pw.close();
     }
     
-    public static final String LOGFILE = "fit.log";
+    static final String LOGFILE = "fit.log";
     
-    public static final String KLOGFILE = "k-curve.csv";
+    static final String KLOGFILE = "k-curve.csv";
     
     
     /*
@@ -719,9 +803,8 @@ public class Testing {
      * Inverts the given matrix
      * @param a the matrix to be inverted
      * @return the inverse of a, a<sup>-1</sup>. a<sup>-1</sup>*a = a*a<sup>-1</sup>=I
-     * @throws MatrixException if a is not square or determinant(a)=0
      */
-    public static double[][] invert(double[][] a) throws NumberFormatException{
+    static double[][] invert(double[][] a) throws NumberFormatException{
         double det = determinant(a);
         if(!Double.isFinite(det) || det == 0.0){
             throw new NumberFormatException("Matrix a is singular.");
@@ -737,7 +820,7 @@ public class Testing {
         }
     }
     
-    public static double[][] multiply(double[][] a, double[][] b) throws NumberFormatException{
+    static double[][] multiply(double[][] a, double[][] b) throws NumberFormatException{
         double[][] prod = new double[a.length][b[0].length];
         if(a[0].length != b.length){
             throw new NumberFormatException("columnspace of a, " + a[0].length + ", and rowspace of b, " + b.length + ", must be the same");
@@ -753,7 +836,7 @@ public class Testing {
         return prod;
     }
     
-    public static double[] multiply(double[][]a, double[] v) throws NumberFormatException{
+    static double[] multiply(double[][]a, double[] v) throws NumberFormatException{
         if(a[0].length != v.length){
             throw new NumberFormatException("columnspace of a, " + a[0].length + ", and rowspace of v, " + v.length + ", must be the same");
         }
@@ -767,7 +850,7 @@ public class Testing {
         return prod;
     }
     
-    public static double[][] multiply(double[][] a, double s){
+    static double[][] multiply(double[][] a, double s){
         double[][] mul = new double[a.length][a[0].length];
         for(int r = 0; r < a.length; r++){
             for(int c = 0; c < a[0].length; c++){
@@ -777,7 +860,7 @@ public class Testing {
         return mul;
     }
     
-    public static double[] multiply(double[] v, double s){
+    static double[] multiply(double[] v, double s){
         double[] mul = new double[v.length];
         for(int i = 0; i < mul.length; i++){
             mul[i] = v[i]*s;
@@ -785,7 +868,7 @@ public class Testing {
         return mul;
     }
     
-    public static double[][] add(double[][] a, double[][] b) throws NumberFormatException{
+    static double[][] add(double[][] a, double[][] b) throws NumberFormatException{
         if(a.length != b.length || a[0].length != b[0].length){
             throw new NumberFormatException("a and b must be the same size!");
         }
@@ -798,7 +881,7 @@ public class Testing {
         return sum;
     }
     
-    public static double[][] subtract(double[][] a, double[][] b) throws NumberFormatException{
+    static double[][] subtract(double[][] a, double[][] b) throws NumberFormatException{
         if(a.length != b.length || a[0].length != b[0].length){
             throw new NumberFormatException("a and b must be the same size!");
         }
@@ -811,7 +894,7 @@ public class Testing {
         return dif;
     }
     
-    public static double[] add(double[] a, double[] b) throws NumberFormatException{
+    static double[] add(double[] a, double[] b) throws NumberFormatException{
         if(a.length != b.length){
             throw new NumberFormatException("a and b must be the same size!");
         }
@@ -822,7 +905,7 @@ public class Testing {
         return sum;
     }
     
-    public static double[] subtract(double[] a, double[] b) throws NumberFormatException{
+    static double[] subtract(double[] a, double[] b) throws NumberFormatException{
         if(a.length != b.length){
             throw new NumberFormatException("a and b must be the same size!");
         }
@@ -833,7 +916,7 @@ public class Testing {
         return dif;
     }
     
-    public static double[][] transpose(double[][] a){
+    static double[][] transpose(double[][] a){
         double[][] transp = new double[a[0].length][a.length];
         for(int r = 0; r < a.length; r ++){
             for(int c = 0; c < a[0].length; c ++){
@@ -848,9 +931,9 @@ public class Testing {
      * @param a the matrix to which v is to be appended
      * @param v the vector to append
      * @return a copy of a with column v added to the right
-     * @throws MatrixException 
+     * @throws NumberFormatException 
      */
-    public static double[][] appendColumn(double[][] a, double[] v) throws NumberFormatException{
+    static double[][] appendColumn(double[][] a, double[] v) throws NumberFormatException{
         if(a.length != v.length){
             throw new NumberFormatException("Rowspace of a, " + a.length + ", and v, " + v.length + ", must be the same");
         }
@@ -869,9 +952,9 @@ public class Testing {
      * @param a the vector to which v is to be appended
      * @param v the vector to append
      * @return a copy of a with column v added to the right
-     * @throws MatrixException 
+     * @throws NumberFormatException 
      */
-    public static double[][] appendColumn(double[] a, double[] v) throws NumberFormatException{
+    static double[][] appendColumn(double[] a, double[] v) throws NumberFormatException{
         if(a.length != v.length){
             throw new NumberFormatException("Rowspace of a, " + a.length + ", and v, " + v.length + ", must be the same");
         }
@@ -888,7 +971,7 @@ public class Testing {
      * @param n the dimension of the identity matrix
      * @return the nxn identity matrix
      */
-    public static double[][] identity(int n){
+    static double[][] identity(int n){
         double[][] ident = new double[n][n];
         for(int r = 0; r < n; r++){
             for(int c = 0; c < n; c++){
@@ -903,7 +986,7 @@ public class Testing {
         return ident;
     }
     
-    public static double determinant(double[][] a) throws NumberFormatException{
+    static double determinant(double[][] a) throws NumberFormatException{
         if(a.length == a[0].length){
             return inner_determinant(a);
         }
@@ -912,7 +995,7 @@ public class Testing {
         }
     }
     
-    private static double inner_determinant(double[][] a){
+    static double inner_determinant(double[][] a){
         if(a.length == 2){//2x2 matrix
             return a[0][0]*a[1][1] - a[0][1]*a[1][0];
         }
@@ -933,7 +1016,7 @@ public class Testing {
         }
     }
     
-    public static double cofactor(double[][] a, int r, int c) throws NumberFormatException{
+    static double cofactor(double[][] a, int r, int c) throws NumberFormatException{
         double sign = -1.0;
         if ((r+c)%2 == 0){
             sign = 1.0;
@@ -947,9 +1030,8 @@ public class Testing {
      * @param r the row to be omitted
      * @param c the column to be omitted
      * @return
-     * @throws MatrixException 
      */
-    private static double[][] minor(double[][] a, int r, int c){
+    static double[][] minor(double[][] a, int r, int c){
         double[][] red = new double[a.length - 1][a[0].length - 1];
         
         for(int ri = 0; ri < a.length - 1; ri++){
