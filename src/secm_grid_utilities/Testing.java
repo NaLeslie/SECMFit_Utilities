@@ -189,7 +189,7 @@ public class Testing {
         return data;
     }
     
-    double[] checkList(double l, double logk){
+    static double[] checkList(double l, double logk){
         double[] result = DUMMY;
         for(int i = 0; i < list_l.size(); i++){
             boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
