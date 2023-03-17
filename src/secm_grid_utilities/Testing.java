@@ -494,6 +494,10 @@ public class Testing {
      */
     static int[][] grid;
     /**
+     * The pixel grid that gets eroded or dilated relative to grid
+     */
+    static int[][] edited_grid;
+    /**
      * the minimum grid_switches x-index
      */
     static int min_x;
@@ -1078,6 +1082,137 @@ public class Testing {
         
         return red;
     }
+    
+    /* 
+    Erosion and dilation
+    */
+    /**
+     * dilates grid by amount, storing the result to edited_grid
+     * @param amount 
+     */
+    static void dilateGrid(double amount){
+        int upperbound = (int)Math.ceil(amount);
+        double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the dilation being from the center of the pixel
+        for(int x = 0; x < grid.length; x++){
+            for(int y = 0; y < grid[0].length; y++){
+                edited_grid[x][y] = grid[x][y];
+            }
+        }
+        if(amount >= 0.2){
+            for(int x = 0; x < grid.length; x++){
+                for(int y = 0; y < grid[0].length; y++){
+                    if(grid[x][y] == 0){
+                        int[][] subdivisions = new int[5][5];
+                        for(int xx = - upperbound; xx <= upperbound; xx++){
+                            for(int yy = - upperbound; yy <= upperbound; yy++){
+                                if(getGrid(x+xx, y+yy) == 1){
+                                    for(int xxx = 0; xxx < 5; xxx ++){
+                                        for(int yyy = 0; yyy < 5; yyy ++){
+                                            double x_subdist = ((double)xxx)*0.2 - 0.4;
+                                            double y_subdist = ((double)yyy)*0.2 - 0.4;
+                                            double xdist = ((double)xx) + x_subdist;
+                                            double ydist = ((double)yy) + y_subdist;
+                                            double distancesq = xdist*xdist + ydist*ydist;
+                                            if(distancesq < amountsq){
+                                                subdivisions[xxx][yyy] = 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        int sum = 0;
+                        for(int i = 0; i < 5; i++){
+                            for(int ii = 0; ii < 5; ii++){
+                                sum += subdivisions[i][ii];
+                            }
+                        }
+                        if(sum > 12){
+                            setGrid(x, y, 1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * dilates grid by amount, storing the result to edited_grid
+     * @param amount 
+     */
+    static void erodeGrid(double amount){
+        int upperbound = (int)Math.ceil(amount);
+        double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the dilation being from the center of the pixel
+        for(int x = 0; x < grid.length; x++){
+            for(int y = 0; y < grid[0].length; y++){
+                edited_grid[x][y] = grid[x][y];
+            }
+        }
+        if(amount >= 0.2){
+            for(int x = 0; x < grid.length; x++){
+                for(int y = 0; y < grid[0].length; y++){
+                    if(grid[x][y] == 1){
+                        int[][] subdivisions = new int[5][5];
+                        for(int xx = - upperbound; xx <= upperbound; xx++){
+                            for(int yy = - upperbound; yy <= upperbound; yy++){
+                                if(getGrid(x+xx, y+yy) == 0){
+                                    for(int xxx = 0; xxx < 5; xxx ++){
+                                        for(int yyy = 0; yyy < 5; yyy ++){
+                                            double x_subdist = ((double)xxx)*0.2 - 0.4;
+                                            double y_subdist = ((double)yyy)*0.2 - 0.4;
+                                            double xdist = ((double)xx) + x_subdist;
+                                            double ydist = ((double)yy) + y_subdist;
+                                            double distancesq = xdist*xdist + ydist*ydist;
+                                            if(distancesq < amountsq){
+                                                subdivisions[xxx][yyy] = 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        int sum = 0;
+                        for(int i = 0; i < 5; i++){
+                            for(int ii = 0; ii < 5; ii++){
+                                sum += subdivisions[i][ii];
+                            }
+                        }
+                        if(sum > 12){
+                            setGrid(x, y, 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * 
+     * @param x
+     * @param y
+     * @return 
+     */
+    static int getGrid(int x, int y){
+        if(x > 0 && y > 0 && x < grid.length && y < grid[0].length){
+            return grid[x][y];
+        }
+        else{
+            return 0;
+        }
+    }
+    
+    /**
+     * 
+     * @param x
+     * @param y
+     * @param value 
+     */
+    static void setGrid(int x, int y, int value){
+        if(x > 0 && y > 0 && x < edited_grid.length && y < edited_grid[0].length){
+            edited_grid[x][y] = value;
+        }
+    }
+    
 }
 
 class Model{
