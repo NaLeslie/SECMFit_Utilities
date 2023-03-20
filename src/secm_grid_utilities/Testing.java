@@ -12,6 +12,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Scanner;
 
@@ -42,20 +43,39 @@ public class Testing {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
         list_data = new LinkedList<Double[]>();
+        System.out.println(getDateStamp());
         try{
             readSECMInfo("Fitfile.csv");
-            runFit("yep", 1.0, -5, false);
+            double amount = -2.0;
+            for(int i = 0; i < 9; i++){
+                applyDilationErosion(amount);
+                exportEditedGrid(i + "_" + amount + ".csv");
+                amount += 0.5;
+            }
+            //runFit("yep", 1.0, -5, false);
         }
         catch(Exception e){
             e.printStackTrace();
         }
     }
     
-    
     /*
     Fitting methods and fields
     */
-    
+    /**
+     * Runs the fitting procedure using Levenberg-Marquardt
+     * @param filename The name of the file containing the data to be fit to (for logging purposes). {@link #readSECMInfo(java.lang.String)} should be used before this method to load-in the necessary data.
+     * @param firstl The initial guess for L
+     * @param firstlogk The initial guess for logk. Use of {@link #findFirstLogK(double, boolean)} to obtain this value is recommended.
+     * @param verbose flag to be ticked if extra data is desired (the current and derivatives at each iteration)
+     * @return The status of the fitting procedure. 
+     * <p>{@link #EXECUTED_OK} if the process converged,</p>
+     * <p>{@link #MAX_ITERATIONS_REACHED} if there is no convergence after {@link #MAX_ITERATIONS} iterations,</p>
+     * <p>or {@link #MAX_LAMBDA_REACHED} if lambda exceeds {@link #MAX_LAMBDA} when trying to compute the next iteration's parameters.</p>
+     * @throws FileNotFoundException
+     * @throws NumberFormatException
+     * @throws IOException 
+     */
     static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
         double[] experimental = true_image;
         double lambda = 0;
@@ -66,15 +86,18 @@ public class Testing {
         double last_l;
         double last_logk;
         //first iteration
+        //compute the currents and residuals for the initial parameter guesses
         double[] curr = runModel(firstl, firstlogk);
         double[] residuals = subtract(experimental, curr);
         
+        //compute the derivatives of the current with respect to the parameters
         double[] curr_dl = runModel(firstl + L_PERTURB, firstlogk);
         double[] dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
         
         double[] curr_dk = runModel(firstl, firstlogk + LOGK_PERTURB);
         double[] dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
         
+        //construct the Jacobian, and perform an iteration of Levenberg-Marquardt
         double[][] J = appendColumn(dl, dk);
         double[][] JT = transpose(J);
         double[][] JTJ = multiply(JT, J);
@@ -93,26 +116,34 @@ public class Testing {
         double[][] JTJinv = invert(add(JTJ, lam_DTD));
         double[] delta_c = multiply(multiply(JTJinv, JT), residuals);
         ssr = sumSquare(residuals);
+        //initialize 'previous iteration' data
         last_ssr = ssr;
-        
         last_l = l;
         last_logk = logk;
         l = last_l + round(delta_c[0], L_DECIMALS);
         logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
+        logInitialGuesses(filename, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr);
         boolean converged = false;
         int iterations = 1;
-        
+        if(verbose){
+            writeIteration("Iteration_1.txt", physical_xs, physical_ys, curr, dl, dk, residuals);
+        }
         //subsequent iterations
         while(!converged && iterations <= MAX_ITERATIONS){
             iterations ++;
+            System.out.println("Iteration " + iterations); 
+            System.out.println("Lambda 0");
             //First lambda
             curr = runModel(l, logk);
             residuals = subtract(experimental, curr);
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
+            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1]}, lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
 
+            //subsequent lambdas (if necessary)
             while(!lambda_ok && lambda <= MAX_LAMBDA){
                 lambda = nextLambda(lambda);
+                System.out.println("Lambda " + lambda);
                 lam_DTD = multiply(DTD, lambda);
                 JTJinv = invert(add(JTJ, lam_DTD));
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
@@ -123,15 +154,19 @@ public class Testing {
                 ssr = sumSquare(residuals);
                 lambda_ok = ssr < last_ssr;
                 logLambda(lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
-                if(delta_c[0] < Math.pow(10, L_DECIMALS) && delta_c[1] < Math.pow(10, LOGK_DECIMALS)){
+                //if the prescribed changes to the parameters are small enough, declare convergence
+                if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS)){
+                    System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1]);
                     lambda_ok = true;
                     converged = true;
                     return EXECUTED_OK;
                 }
             }
+            //check if the loop ended due to lambda hitting its maximum
             if(!lambda_ok){
                 return MAX_LAMBDA_REACHED;
             }
+            //end the process if this was the last iteration.
             if(iterations >= MAX_ITERATIONS){
                 return MAX_ITERATIONS_REACHED;
             }
@@ -143,11 +178,11 @@ public class Testing {
             l = list_l.get(lowest_sim);
             logk = list_logk.get(lowest_sim);
             //end of Experimental bit
-            
+            //update the previous iteration parameters
             last_ssr = ssr;
             last_l = l;
             last_logk = logk;
-            
+            //compute or look up L derivative
             int query = checkList(l - L_PERTURB, logk);
             if(query == -1){
                 curr_dl = runModel(l + L_PERTURB, logk);
@@ -159,7 +194,7 @@ public class Testing {
                 dl = multiply(subtract(curr_dl, curr), -L_PERTURB);
             }
             
-
+            //compute or look up logk derivative
             query = checkList(l, logk - LOGK_PERTURB);
             if(query == -1){
                 curr_dk = runModel(l, logk + LOGK_PERTURB);
@@ -170,8 +205,11 @@ public class Testing {
                 //NOTE: this curr_dk is effectively simulated as being perturbed negatively
                 dk = multiply(subtract(curr_dk, curr), -LOGK_PERTURB);
             }
-            
 
+            if(verbose){
+                writeIteration("Iteration_" + iterations + ".txt", physical_xs, physical_ys, curr, dl, dk, residuals);
+            }
+            //construct the jacobian
             J = appendColumn(dl, dk);
             JT = transpose(J);
             JTJ = multiply(JT, J);
@@ -186,7 +224,9 @@ public class Testing {
             delta_c = multiply(multiply(JTJinv, JT), residuals);
             l = last_l + round(delta_c[0], L_DECIMALS);
             logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-            if(delta_c[0] < Math.pow(10, L_DECIMALS) && delta_c[1] < Math.pow(10, LOGK_DECIMALS)){
+            //if the prescribed changes to the parameters are small enough, declare convergence
+            if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS)){
+                System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1]);
                 converged = true;
                 return EXECUTED_OK;
             }
@@ -195,9 +235,18 @@ public class Testing {
         return MAX_ITERATIONS_REACHED;
     }
     
+    /**
+     * Checks if the parameters have already been used in a previous iteration, then either returns the previously calculated currents or simulates the currents.
+     * @param l the L parameter
+     * @param logk the base-ten logarithm of the k parameter
+     * @return The currents of the microelectrode at the specified relative positions with respect to the reactive feature. 
+     * The positions follow the same order that their currents are defined in the control file.
+     * @throws FileNotFoundException 
+     */
     static double[] runModel(double l, double logk) throws FileNotFoundException{
         int index = checkList(l, logk);
         if(index == -1){
+            System.out.println(getDateStamp() + ": simulating: L: " + l + "; logk: " + logk);
             Model temp = run(l, logk, false);
             run2(temp, false);
             double[] data = readData();
@@ -206,10 +255,56 @@ public class Testing {
             return data;
         }
         else{
+            System.out.println(getDateStamp() + ":     lookup: L: " + l + "; logk: " + logk);
             return convertToRegularDouble(list_data.get(index));
         }
     }
     
+    /**
+     * Prints a progress bar to the console
+     * @param prog the progress so far
+     * @param total the maximum possible value for progress
+     * @return The progress bar as a string. Note: the first character of this string is a '\r'.
+     */
+    static String pBar(int prog, int total){
+	int len = 25;
+	int filled = (len*prog) / total;
+	int percent = (100*prog) / total;
+	String bar = " ";
+	for(int i = 1; i <= filled; i++){
+	  bar = bar.concat("\u2588");
+	}
+	for(int i = filled + 1; i <= len; i++){
+	  bar = bar.concat("\u2591");
+	}
+	bar = bar.concat("  " + percent + "% complete.");
+	return "\r " + bar;
+    }
+    
+    /**
+     * Returns The current ISO8601 timestamp (minus the timezone information)
+     * @return The current time and date as yyyy-mm-ddThh:mm:ss
+     */
+    static String getDateStamp(){
+        Calendar cl = Calendar.getInstance();
+        int year = cl.get(Calendar.YEAR);
+        int month = cl.get(Calendar.MONTH) + 1;
+        int day = cl.get(Calendar.DAY_OF_MONTH);
+        int hour = cl.get(Calendar.HOUR_OF_DAY);
+        int minute = cl.get(Calendar.MINUTE);
+        int second = cl.get(Calendar.SECOND);
+        String datetime = String.format("[%04d-%02d-%02dT%02d:%02d:%02d]",year, month, day, hour, minute, second);
+        return datetime;
+    }
+    
+    /**
+     * Checks the list of previous simulations and returns where in the list a previous simulation with the same parameters occurred.
+     * Or a -1 if no such simulation is in the list.
+     * @param l The L parameter to find.
+     * @param logk The logk to find.
+     * @return -1 if there have been no previous simulations with both L and logk, 
+     * or the index in {@link #list_data} that corresponds to the given L and logk.
+     */
     static int checkList(double l, double logk){
         for(int i = 0; i < list_l.size(); i++){
             boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
@@ -221,6 +316,12 @@ public class Testing {
         return -1;
     }
     
+    /**
+     * Adds the l, logk, and data to the list of previous simulations.
+     * @param l The l parameter.
+     * @param logk The logk parameter.
+     * @param data The simulated currents.
+     */
     static void addToList(double l, double logk, double[] data){
         Double dl = l;
         Double dlogk = logk;
@@ -230,6 +331,11 @@ public class Testing {
         list_data.add(ddata);
     }
     
+    /**
+     * Method for converting double[] to Double[]
+     * @param input The double[] to be converted.
+     * @return The equivalent Double[].
+     */
     static Double[] convertToClassDouble(double[] input){
         int len = input.length;
         Double[] output = new Double[len];
@@ -239,6 +345,11 @@ public class Testing {
         return output;
     }
     
+    /**
+     * Method for converting Double[] to double[]
+     * @param input The Double[] to be converted.
+     * @return The equivalent double[].
+     */
     static double[] convertToRegularDouble(Double[] input){
         int len = input.length;
         double[] output = new double[len];
@@ -248,6 +359,13 @@ public class Testing {
         return output;
     }
     
+    /**
+     * Determines if d1 and cd2 are equal to one-another to a certain number of decimal points.
+     * @param d1 The double to be compared to cd2.
+     * @param cd2 The Double to be compared to d1.
+     * @param decimals The number of decimal points to which the equality test is done.
+     * @return true if round(abs(d1-cd2)*(10**decimals)) == 0, false otherwise.
+     */
     static boolean precisionEquals(double d1, Double cd2, int decimals){
         double d2 = (double)cd2;
         double factor = Math.pow(10, decimals);
@@ -256,6 +374,13 @@ public class Testing {
         return rounded_difference == 0;
     }
     
+    /**
+     * Method for finding the best first guess for logk.
+     * @param firstl the initial guess for the L parameter.
+     * @param verbose flag for determining if extra data logging is desired.
+     * @return The first guess for the logarithm of the k parameter.
+     * @throws FileNotFoundException 
+     */
     static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException{
         //call the run method to produce a current when the electrode is at distance z and GridData.getCentre() relative to the reactive feature.
         Model model = run(firstl, 1.0, true);
@@ -277,6 +402,11 @@ public class Testing {
         return TEST_LOG_K[max_derivative_index];
     }
     
+    /**
+     * Method that controls the lambda-escalation policy for the Levenberg-Marquardt algorithm.
+     * @param current_lambda The lambda that was just used.
+     * @return The new lambda.
+     */
     static double nextLambda(double current_lambda){
         if(current_lambda == 0.0){
             return 1E-4;
@@ -298,6 +428,11 @@ public class Testing {
         }
     }
     
+    /**
+     * Computes the sum of squares for the residuals.
+     * @param residuals The residuals to be squared and summed.
+     * @return The sum of squares.
+     */
     static double sumSquare(double[] residuals){
         double sum = 0;
         for(double r : residuals){
@@ -306,10 +441,20 @@ public class Testing {
         return sum;
     }
     
+    /**
+     * Rounds value to decimals decimal places.
+     * @param value The value to be rounded.
+     * @param decimals The number of decimals to round to.
+     * @return The rounded value.
+     */
     static double round(double value, int decimals){
         return Math.rint(value*Math.pow(10, decimals))/Math.pow(10, decimals);
     }
     
+    /**
+     * Searches the simulation data for the parameters that have given the lowest sum of square residuals so far.
+     * @return The index in the simulation data list that corresponds to the lowest SSR.
+     */
     static int findLowestSSR(){
         if(list_l.isEmpty()){
             return -1;
@@ -1087,25 +1232,47 @@ public class Testing {
     Erosion and dilation
     */
     /**
+     * Applies a dilation or erosion by |amount|
+     * If amount is negative, an erosion will be carried-out, otherwise, a dilation will.
+     * @param amount the amount by which the grid is to be dilated or eroded in grid-space (i.e. the distance between adjacent grid elements is 1.
+     */
+    static void applyDilationErosion(double amount){
+        if(amount < 0){
+            erodeGrid(-amount);
+        }
+        else{
+            dilateGrid(amount);
+        }
+    }
+    /**
      * dilates grid by amount, storing the result to edited_grid
-     * @param amount 
+     * @param amount the amount by which the grid is to be dilated in grid-space (i.e. the distance between adjacent grid elements is 1.
      */
     static void dilateGrid(double amount){
         int upperbound = (int)Math.ceil(amount);
         double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the dilation being from the center of the pixel
+        //(re)-initialize the edited_grid
+        edited_grid = new int[grid.length][grid[0].length];
         for(int x = 0; x < grid.length; x++){
             for(int y = 0; y < grid[0].length; y++){
                 edited_grid[x][y] = grid[x][y];
             }
         }
-        if(amount >= 0.2){
+        if(amount >= 0.2){ // don't bother with the dilation if the amount is too small to change anything
+            //iterate through every point
             for(int x = 0; x < grid.length; x++){
                 for(int y = 0; y < grid[0].length; y++){
                     if(grid[x][y] == 0){
+                        //if the value of the grid point can be changed, iterate through its neighboring points
                         int[][] subdivisions = new int[5][5];
                         for(int xx = - upperbound; xx <= upperbound; xx++){
                             for(int yy = - upperbound; yy <= upperbound; yy++){
                                 if(getGrid(x+xx, y+yy) == 1){
+                                    /*if the point at (x+xx,y+yy) is different from 
+                                    the one at (x,y), subdivide the point at (x,y)
+                                    into a 5x5 grid and see how many of these grid
+                                    points are within the erosion or dilation distance
+                                    */
                                     for(int xxx = 0; xxx < 5; xxx ++){
                                         for(int yyy = 0; yyy < 5; yyy ++){
                                             double x_subdist = ((double)xxx)*0.2 - 0.4;
@@ -1121,6 +1288,9 @@ public class Testing {
                                 }
                             }
                         }
+                        /*compute the number of subdivisions at (x,y) that should change.
+                        If they are in the majority, flip the pixel.
+                        */
                         int sum = 0;
                         for(int i = 0; i < 5; i++){
                             for(int ii = 0; ii < 5; ii++){
@@ -1137,25 +1307,34 @@ public class Testing {
     }
     
     /**
-     * dilates grid by amount, storing the result to edited_grid
-     * @param amount 
+     * erodes grid by amount, storing the result to edited_grid
+     * @param amount the amount by which the grid is to be eroded in grid-space (i.e. the distance between adjacent grid elements is 1.
      */
     static void erodeGrid(double amount){
         int upperbound = (int)Math.ceil(amount);
-        double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the dilation being from the center of the pixel
+        double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the erosion being from the center of the pixel
+        //(re)-initialize the edited_grid
+        edited_grid = new int[grid.length][grid[0].length];
         for(int x = 0; x < grid.length; x++){
             for(int y = 0; y < grid[0].length; y++){
                 edited_grid[x][y] = grid[x][y];
             }
         }
-        if(amount >= 0.2){
+        if(amount >= 0.2){// don't bother with the erosion if the amount is too small to change anything
+            //iterate through every point
             for(int x = 0; x < grid.length; x++){
                 for(int y = 0; y < grid[0].length; y++){
                     if(grid[x][y] == 1){
+                        //if the value of the grid point can be changed, iterate through its neighboring points
                         int[][] subdivisions = new int[5][5];
                         for(int xx = - upperbound; xx <= upperbound; xx++){
                             for(int yy = - upperbound; yy <= upperbound; yy++){
                                 if(getGrid(x+xx, y+yy) == 0){
+                                    /*if the point at (x+xx,y+yy) is different from 
+                                    the one at (x,y), subdivide the point at (x,y)
+                                    into a 5x5 grid and see how many of these grid
+                                    points are within the erosion or dilation distance
+                                    */
                                     for(int xxx = 0; xxx < 5; xxx ++){
                                         for(int yyy = 0; yyy < 5; yyy ++){
                                             double x_subdist = ((double)xxx)*0.2 - 0.4;
@@ -1171,6 +1350,9 @@ public class Testing {
                                 }
                             }
                         }
+                        /*compute the number of subdivisions at (x,y) that should change.
+                        If they are in the majority, flip the pixel.
+                        */
                         int sum = 0;
                         for(int i = 0; i < 5; i++){
                             for(int ii = 0; ii < 5; ii++){
@@ -1180,6 +1362,7 @@ public class Testing {
                         if(sum > 12){
                             setGrid(x, y, 0);
                         }
+                        
                     }
                 }
             }
@@ -1213,6 +1396,21 @@ public class Testing {
         }
     }
     
+    /*
+    TESTING AND DEBUGGING PURPOSES ONLY
+    */
+    static void exportEditedGrid(String filename) throws IOException{
+        File f = new File(filename);
+        f.createNewFile();
+        PrintWriter pw = new PrintWriter(f);
+        pw.print("#x,y,switch");
+        for(int x = 0; x < edited_grid.length; x++){
+            for(int y = 0; y < edited_grid[0].length; y++){
+                pw.print("\n" + x + "," + y + "," + edited_grid[x][y]);
+            }
+        }
+        pw.close();
+    }
 }
 
 class Model{
