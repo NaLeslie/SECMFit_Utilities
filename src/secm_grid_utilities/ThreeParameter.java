@@ -270,12 +270,13 @@ public class ThreeParameter {
      * The positions follow the same order that their currents are defined in the control file.
      * @throws FileNotFoundException 
      */
-    static double[] runModel(double l, double logk, double r) throws FileNotFoundException{
+    static double[] runModel(double l, double logk, double r) throws FileNotFoundException, IOException{
         int[][] de_grid = applyDilationErosion(r);
         int gridcount = getSum(de_grid);
         int index = checkList(l, logk, gridcount);
         if(index == -1){
             System.out.println(getDateStamp() + ": simulating: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
+            writeReactivityFile(de_grid, Math.pow(10, logk));
             Model temp = run(reactivity_mapfile, l, physical_xs, physical_ys);
             double[] data = readData();
             eraseDataFile();
