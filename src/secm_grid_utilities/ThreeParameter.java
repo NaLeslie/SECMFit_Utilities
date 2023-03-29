@@ -19,27 +19,28 @@ import java.util.Scanner;
  *
  * @author Nathaniel
  */
-public class Testing {
+public class ThreeParameter {
 
     /**
      * Stand-in for auto-generated method
-     * @param z
-     * @param logk
-     * @param testk
+     * @param reactivity_data_filename
+     * @param l The L parameter
+     * @param xcoords The x coordinates of each sampled point
+     * @param ycoords The y coordinates of each sampled point
      * @return 
      */
-    static Model run(double l, double logk, boolean testk){
+    static Model run(String reactivity_data_filename, double l, double[] xcoords, double[] ycoords){
         return new Model();
     }
-    static Model run2(Model model, boolean testk){
+    
+    static Model runk(String reactivity_data_filename, double[] ks, double l, double xcoord, double ycoord){
         return new Model();
     }
     
     /**
      * @param args the command line arguments
      */
-    public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
-        ThreeParameter.main();
+    public static void main() throws NumberFormatException, FileNotFoundException {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
         list_data = new LinkedList<Double[]>();
@@ -48,8 +49,8 @@ public class Testing {
             readSECMInfo("Fitfile.csv");
             double amount = -2.0;
             for(int i = 0; i < 9; i++){
-                applyDilationErosion(amount);
-                exportEditedGrid(i + "_" + amount + ".csv");
+                int[][] newgrid = applyDilationErosion(amount);
+                exportEditedGrid(i + "_" + amount + ".csv", newgrid);
                 amount += 0.5;
             }
             //runFit("yep", 1.0, -5, false);
@@ -76,29 +77,35 @@ public class Testing {
      * @throws NumberFormatException
      * @throws IOException 
      */
-    static int runFit(String filename, double firstl, double firstlogk, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
+    static int runFit(String filename, double firstl, double firstlogk, double firstr, boolean verbose) throws FileNotFoundException, NumberFormatException, IOException{
         double[] experimental = true_image;
         double lambda = 0;
         double ssr = 0;
         double last_ssr;
         double l = firstl;
         double logk = firstlogk;
+        double r = firstr;
         double last_l;
         double last_logk;
+        double last_r;
         //first iteration
         //compute the currents and residuals for the initial parameter guesses
-        double[] curr = runModel(firstl, firstlogk);
+        double[] curr = runModel(firstl, firstlogk, firstr);
         double[] residuals = subtract(experimental, curr);
         
         //compute the derivatives of the current with respect to the parameters
-        double[] curr_dl = runModel(firstl + L_PERTURB, firstlogk);
+        double[] curr_dl = runModel(firstl + L_PERTURB, firstlogk, firstr);
         double[] dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
         
-        double[] curr_dk = runModel(firstl, firstlogk + LOGK_PERTURB);
+        double[] curr_dk = runModel(firstl, firstlogk + LOGK_PERTURB, firstr);
         double[] dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
         
+        double[] curr_dr = runModel(firstl, firstlogk, firstr + R_PERTURB);
+        double[] dr = multiply(subtract(curr_dr, curr), 1.0/R_PERTURB);
+        
         //construct the Jacobian, and perform an iteration of Levenberg-Marquardt
-        double[][] J = appendColumn(dl, dk);
+        //[dl dk dr]
+        double[][] J = appendColumn(appendColumn(dl, dk), dr);
         double[][] JT = transpose(J);
         double[][] JTJ = multiply(JT, J);
         double[][] DTD = new double[JTJ.length][JTJ.length];
@@ -120,13 +127,15 @@ public class Testing {
         last_ssr = ssr;
         last_l = l;
         last_logk = logk;
+        last_r = r;
         l = last_l + round(delta_c[0], L_DECIMALS);
         logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-        logInitialGuesses(filename, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr);
+        r = last_r + round(delta_c[2], R_DECIMALS);
+        logInitialGuesses(filename, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr);
         boolean converged = false;
         int iterations = 1;
         if(verbose){
-            writeIteration("Iteration_1.txt", physical_xs, physical_ys, curr, dl, dk, residuals);
+            writeIteration("Iteration_1.txt", physical_xs, physical_ys, curr, dl, dk, dr, residuals);
         }
         //subsequent iterations
         while(!converged && iterations <= MAX_ITERATIONS){
@@ -134,11 +143,11 @@ public class Testing {
             System.out.println("Iteration " + iterations); 
             System.out.println("Lambda 0");
             //First lambda
-            curr = runModel(l, logk);
+            curr = runModel(l, logk, r);
             residuals = subtract(experimental, curr);
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
-            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1]}, lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
+            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1]}, lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
 
             //subsequent lambdas (if necessary)
             while(!lambda_ok && lambda <= MAX_LAMBDA){
@@ -149,14 +158,15 @@ public class Testing {
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-                curr = runModel(l, logk);
+                r = last_r + round(delta_c[2], R_DECIMALS);
+                curr = runModel(l, logk, r);
                 residuals = subtract(experimental, curr);
                 ssr = sumSquare(residuals);
                 lambda_ok = ssr < last_ssr;
-                logLambda(lambda, new String[]{"L", "log10k"}, new double[]{l, logk}, ssr, lambda_ok);
+                logLambda(lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
                 //if the prescribed changes to the parameters are small enough, declare convergence
-                if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS)){
-                    System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1]);
+                if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
+                    System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
                     lambda_ok = true;
                     converged = true;
                     return EXECUTED_OK;
@@ -182,35 +192,51 @@ public class Testing {
             last_ssr = ssr;
             last_l = l;
             last_logk = logk;
+            int[][] de_grid = applyDilationErosion(r);
+            int gridcount = getSum(de_grid);
             //compute or look up L derivative
-            int query = checkList(l - L_PERTURB, logk);
+            int query = checkList(l - L_PERTURB, logk, gridcount);
             if(query == -1){
-                curr_dl = runModel(l + L_PERTURB, logk);
-                dl = multiply(subtract(curr_dl, curr), L_PERTURB);
+                curr_dl = runModel(l + L_PERTURB, logk, r);
+                dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
             }
             else{
                 curr_dl = convertToRegularDouble(list_data.get(query));
                 //NOTE: this curr_dl is effectively simulated as being perturbed negatively
-                dl = multiply(subtract(curr_dl, curr), -L_PERTURB);
+                dl = multiply(subtract(curr_dl, curr), -1.0/L_PERTURB);
             }
             
             //compute or look up logk derivative
-            query = checkList(l, logk - LOGK_PERTURB);
+            query = checkList(l, logk - LOGK_PERTURB, gridcount);
             if(query == -1){
-                curr_dk = runModel(l, logk + LOGK_PERTURB);
-                dk = multiply(subtract(curr_dk, curr), LOGK_PERTURB);
+                curr_dk = runModel(l, logk + LOGK_PERTURB, r);
+                dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
             }
             else{
                 curr_dk = convertToRegularDouble(list_data.get(query));
                 //NOTE: this curr_dk is effectively simulated as being perturbed negatively
-                dk = multiply(subtract(curr_dk, curr), -LOGK_PERTURB);
+                dk = multiply(subtract(curr_dk, curr), -1.0/LOGK_PERTURB);
+            }
+            
+            //compute or look up r derivative
+            de_grid = applyDilationErosion(r - R_PERTURB);
+            gridcount = getSum(de_grid);
+            query = checkList(l, logk, gridcount);
+            if(query == -1){
+                curr_dr = runModel(l, logk, r + R_PERTURB);
+                dr = multiply(subtract(curr_dr, curr), 1.0/R_PERTURB);
+            }
+            else{
+                curr_dr = convertToRegularDouble(list_data.get(query));
+                //NOTE: this curr_dr is effectively simulated as being perturbed negatively
+                dr = multiply(subtract(curr_dr, curr), -1.0/R_PERTURB);
             }
 
             if(verbose){
-                writeIteration("Iteration_" + iterations + ".txt", physical_xs, physical_ys, curr, dl, dk, residuals);
+                writeIteration("Iteration_" + iterations + ".txt", physical_xs, physical_ys, curr, dl, dk, dr, residuals);
             }
             //construct the jacobian
-            J = appendColumn(dl, dk);
+            J = appendColumn(appendColumn(dl, dk), dr);
             JT = transpose(J);
             JTJ = multiply(JT, J);
             for(int i = 0; i < DTD.length; i++){
@@ -224,9 +250,10 @@ public class Testing {
             delta_c = multiply(multiply(JTJinv, JT), residuals);
             l = last_l + round(delta_c[0], L_DECIMALS);
             logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
+            r = last_r + round(delta_c[2], R_DECIMALS);
             //if the prescribed changes to the parameters are small enough, declare convergence
-            if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS)){
-                System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1]);
+            if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
+                System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
                 converged = true;
                 return EXECUTED_OK;
             }
@@ -243,19 +270,20 @@ public class Testing {
      * The positions follow the same order that their currents are defined in the control file.
      * @throws FileNotFoundException 
      */
-    static double[] runModel(double l, double logk) throws FileNotFoundException{
-        int index = checkList(l, logk);
+    static double[] runModel(double l, double logk, double r) throws FileNotFoundException{
+        int[][] de_grid = applyDilationErosion(r);
+        int gridcount = getSum(de_grid);
+        int index = checkList(l, logk, gridcount);
         if(index == -1){
-            System.out.println(getDateStamp() + ": simulating: L: " + l + "; logk: " + logk);
-            Model temp = run(l, logk, false);
-            run2(temp, false);
+            System.out.println(getDateStamp() + ": simulating: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
+            Model temp = run(reactivity_mapfile, l, physical_xs, physical_ys);
             double[] data = readData();
             eraseDataFile();
-            addToList(l, logk, data);
+            addToList(l, logk, gridcount, data);
             return data;
         }
         else{
-            System.out.println(getDateStamp() + ":     lookup: L: " + l + "; logk: " + logk);
+            System.out.println(getDateStamp() + ":     lookup: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
             return convertToRegularDouble(list_data.get(index));
         }
     }
@@ -305,11 +333,12 @@ public class Testing {
      * @return -1 if there have been no previous simulations with both L and logk, 
      * or the index in {@link #list_data} that corresponds to the given L and logk.
      */
-    static int checkList(double l, double logk){
+    static int checkList(double l, double logk, int gridsum){
         for(int i = 0; i < list_l.size(); i++){
             boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
             boolean logkeq = precisionEquals(l, list_logk.get(i), LOGK_DECIMALS);
-            if(leq && logkeq){
+            boolean gseq = list_gridsum.get(i).intValue() == gridsum;
+            if(leq && logkeq && gseq){
                 return i;
             }
         }
@@ -322,12 +351,14 @@ public class Testing {
      * @param logk The logk parameter.
      * @param data The simulated currents.
      */
-    static void addToList(double l, double logk, double[] data){
+    static void addToList(double l, double logk, int gridsum, double[] data){
         Double dl = l;
         Double dlogk = logk;
+        Integer gsum = gridsum;
         Double[] ddata = convertToClassDouble(data);
         list_l.add(dl);
         list_logk.add(dlogk);
+        list_gridsum.add(gsum);
         list_data.add(ddata);
     }
     
@@ -381,10 +412,11 @@ public class Testing {
      * @return The first guess for the logarithm of the k parameter.
      * @throws FileNotFoundException 
      */
-    static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException{
+    static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException, IOException{
         //call the run method to produce a current when the electrode is at distance z and GridData.getCentre() relative to the reactive feature.
-        Model model = run(firstl, 1.0, true);
-        run2(model, true);
+        writeReactivityFile(grid, 1.0);
+        int[] centre = getCentre();
+        Model model = runk(reactivity_mapfile, TEST_LOG_K, firstl, centre[0], centre[1]);
         double[] curr = readData();
         eraseDataFile();
         double max_derivative = curr[2] - curr[0];
@@ -514,7 +546,17 @@ public class Testing {
     /**
      * The perturbation that is to be introduced to the base-ten logarithm of k.
      */
-    static final double LOGK_PERTURB = 0.001;//[k] = [m/s]
+    static final double LOGK_PERTURB = 0.005;//[k] = [m/s]
+    
+    /**
+     * The number of decimal points to which the R-parameter is to be considered.
+     */
+    static final int R_DECIMALS = 1;//in grid pixels
+    
+    /**
+     * The perturbation that is made to the R-parameter
+     */
+    static final double R_PERTURB = 0.6;//in grid pixels
     
     /*
     Lists for storing simulation history (to avoid redundant simulations)
@@ -529,6 +571,13 @@ public class Testing {
      * List for holding the logk parameters that have been simulated
      */
     static LinkedList<Double> list_logk;
+    
+    /**
+     * List for holding the total number of grid points that are switched 'on'.
+     * Since the possible grid configurations are controlled by erosion or dilation of the initial grid configuration,
+     * The pixels will turn 'on' or 'off' in a very specific order.
+     */
+    static LinkedList<Integer> list_gridsum;
     
     /**
      * List for holding the current results for each secm image simulation.
@@ -680,14 +729,17 @@ public class Testing {
      * The experimental x-coordinates in meters
      */
     static double[] physical_xs;
+    
     /**
      * The experimental y-coordinates in meters
      */
     static double[] physical_ys;
+    
     /**
      * The grid_switches x-indexes
      */
     static int[] sample_xs;
+    
     /**
      * The grid_switches y-indexes
      */
@@ -697,19 +749,21 @@ public class Testing {
      * The pixel grid_switches
      */
     static int[][] grid;
-    /**
-     * The pixel grid that gets eroded or dilated relative to grid
-     */
-    static int[][] edited_grid;
+    
     /**
      * the minimum grid_switches x-index
      */
     static int min_x;
+    
     /**
      * the minimum grid_switches y-index
      */
     static int min_y;
     
+    /**
+     * The filepath for the instruction file.
+     */
+    static String true_file;
     
     /*
     IO-handling methods and fields
@@ -934,7 +988,7 @@ public class Testing {
      */
     static void readSECMInfo(String filepath) throws FileNotFoundException{
         File f = new File(filepath);
-        
+        true_file = filepath;
         int minx = 0;
         int miny = 0;
         int max_x = 0;
@@ -1098,7 +1152,7 @@ public class Testing {
      * @param residual The residuals.
      * @throws FileNotFoundException 
      */
-    static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] residual) throws FileNotFoundException{
+    static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] dr, double[] residual) throws FileNotFoundException{
         File f = new File(fname);
         PrintWriter pw = new PrintWriter(f);
             pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], residual [A]");
@@ -1124,6 +1178,62 @@ public class Testing {
         pw.close();
     }
     
+    static void writeReactivityFile(int[][] de_grid, double reactivity) throws IOException, FileNotFoundException{
+        double[][] reactivitymap = new double[grid.length][grid[0].length];
+        for(int x = 0; x < grid.length; x++){
+            for(int y = 0; y < grid[0].length; y++){
+                double pv = de_grid[x][y];
+                reactivitymap[x][y] = reactivity*pv;
+            }
+        }
+        File originalfile = new File(true_file);
+        File newfile = new File(reactivity_mapfile);
+        if(true_file.equals(reactivity_mapfile)){
+            throw new IOException("Cannot read and write to the same file");
+        }
+        newfile.createNewFile();
+        Scanner s = new Scanner(originalfile);
+        PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(newfile)));
+        String sep = ",";
+        
+        if(s.hasNextLine()){
+            String fl = s.nextLine();
+            pw.print(fl);
+            if(fl.equalsIgnoreCase("##ENCODING: csv")){
+                sep = ",";
+            }
+            else if(fl.equalsIgnoreCase("##ENCODING: tsv")){
+                sep = "\t";
+            }
+            else{
+                throw new FileNotFoundException("File incorrectly formatted.");
+            }
+        }
+        else{
+            throw new FileNotFoundException("File incorrectly formatted.");
+        }
+        
+        boolean first = true;
+        while(s.hasNextLine()){
+            String line = s.nextLine();
+            if(!line.startsWith("#")){
+                String[] linesplit = line.split(sep);
+                int x = Integer.parseInt(linesplit[0]);
+                int y = Integer.parseInt(linesplit[1]);
+                //copy-over the relevant parts of the file
+                if(!first){
+                    pw.print("\n" + linesplit[3] + "," + linesplit[4] + "," + reactivitymap[x][y]);
+                }
+                else{
+                    pw.print(linesplit[3] + "," + linesplit[4] + "," + reactivitymap[x][y]);
+                }
+            }
+        }
+        
+        s.close();
+        pw.close();
+    }
+    
     /**
      * The file to which logging information will be written.
      */
@@ -1134,6 +1244,10 @@ public class Testing {
      */
     static final String KLOGFILE = "k-curve.csv";
     
+    /**
+     * The file to which the reactivity map will be written and read from.
+     */
+    static String reactivity_mapfile = "func.csv";
     
     /*
     Linear algebra-handling methods and fields
@@ -1477,23 +1591,23 @@ public class Testing {
      * If amount is negative, an erosion will be carried-out, otherwise, a dilation will.
      * @param amount the amount by which the grid is to be dilated or eroded in grid-space (i.e. the distance between adjacent grid elements is 1.
      */
-    static void applyDilationErosion(double amount){
+    static int[][] applyDilationErosion(double amount){
         if(amount < 0){
-            erodeGrid(-amount);
+            return erodeGrid(-amount);
         }
         else{
-            dilateGrid(amount);
+            return dilateGrid(amount);
         }
     }
     /**
      * dilates grid by amount, storing the result to edited_grid
      * @param amount the amount by which the grid is to be dilated in grid-space (i.e. the distance between adjacent grid elements is 1.
      */
-    static void dilateGrid(double amount){
+    static int[][] dilateGrid(double amount){
         int upperbound = (int)Math.ceil(amount);
         double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the dilation being from the center of the pixel
         //(re)-initialize the edited_grid
-        edited_grid = new int[grid.length][grid[0].length];
+        int[][] edited_grid = new int[grid.length][grid[0].length];
         for(int x = 0; x < grid.length; x++){
             for(int y = 0; y < grid[0].length; y++){
                 edited_grid[x][y] = grid[x][y];
@@ -1539,23 +1653,24 @@ public class Testing {
                             }
                         }
                         if(sum > 12){
-                            setGrid(x, y, 1);
+                            edited_grid[x][y] = 1;
                         }
                     }
                 }
             }
         }
+        return edited_grid;
     }
     
     /**
      * erodes grid by amount, storing the result to edited_grid
      * @param amount the amount by which the grid is to be eroded in grid-space (i.e. the distance between adjacent grid elements is 1.
      */
-    static void erodeGrid(double amount){
+    static int[][] erodeGrid(double amount){
         int upperbound = (int)Math.ceil(amount);
         double amountsq = (amount + 0.5) * (amount + 0.5);// adding 0.5 due to the erosion being from the center of the pixel
         //(re)-initialize the edited_grid
-        edited_grid = new int[grid.length][grid[0].length];
+        int[][] edited_grid = new int[grid.length][grid[0].length];
         for(int x = 0; x < grid.length; x++){
             for(int y = 0; y < grid[0].length; y++){
                 edited_grid[x][y] = grid[x][y];
@@ -1601,13 +1716,29 @@ public class Testing {
                             }
                         }
                         if(sum > 12){
-                            setGrid(x, y, 0);
+                            edited_grid[x][y] = 0;
                         }
                         
                     }
                 }
             }
         }
+        return edited_grid;
+    }
+    
+    /**
+     * Counts the number of pixels that are switched on in a given grid
+     * @param de_grid A grid where '1' indicates the pixel is on and '0' indicates the pixel is off.
+     * @return 
+     */
+    static int getSum(int[][] de_grid){
+        int runningcount = 0;
+        for(int x = 0; x < de_grid.length; x++){
+            for(int y = 0; y < de_grid[0].length; y++){
+                runningcount += de_grid[x][y];
+            }
+        }
+        return runningcount;
     }
     
     /**
@@ -1625,22 +1756,10 @@ public class Testing {
         }
     }
     
-    /**
-     * Sets the value of the {@link #grid} at (x,y). If (x,y) is outside of the grid nothing will happen.
-     * @param x The x-index of interest.
-     * @param y The y-index of interest.
-     * @param value The new value for {@link #grid} at (x,y).
-     */
-    static void setGrid(int x, int y, int value){
-        if(x > 0 && y > 0 && x < edited_grid.length && y < edited_grid[0].length){
-            edited_grid[x][y] = value;
-        }
-    }
-    
     /*
     TESTING AND DEBUGGING PURPOSES ONLY
     */
-    static void exportEditedGrid(String filename) throws IOException{
+    static void exportEditedGrid(String filename, int[][] edited_grid) throws IOException{
         File f = new File(filename);
         f.createNewFile();
         PrintWriter pw = new PrintWriter(f);
@@ -1652,11 +1771,4 @@ public class Testing {
         }
         pw.close();
     }
-}
-
-class Model{
-    public Model(){
-        property = 0;
-    }
-    public int property;
 }
