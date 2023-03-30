@@ -11,6 +11,7 @@ import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Paths;
 import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -1179,6 +1180,13 @@ public class ThreeParameter {
         pw.close();
     }
     
+    /**
+     * Writes the reactivity information to {@link #reactivity_mapfile}
+     * @param de_grid The map of pixels that are switched on and off
+     * @param reactivity The rate constant of the activated pixels in [m/s]
+     * @throws IOException
+     * @throws FileNotFoundException 
+     */
     static void writeReactivityFile(int[][] de_grid, double reactivity) throws IOException, FileNotFoundException{
         double[][] reactivitymap = new double[grid.length][grid[0].length];
         for(int x = 0; x < grid.length; x++){
@@ -1233,6 +1241,36 @@ public class ThreeParameter {
         
         s.close();
         pw.close();
+    }
+    
+    /**
+     * Fetches the current working directory.
+     * @return The absolute file path of the directory from which this program is executing, ".".
+     */
+    static String getCWD(){
+        return Paths.get(".").toAbsolutePath().normalize().toString();
+    }
+    
+    /**
+     * Converts an array of doubles to a space separated String.
+     * @param a The array of doubles to be converted.
+     * @return A space separated String containing all of the elements of a.
+     */
+    static String toString(double[] a){
+        if(a.length > 1){
+            String sep = " ";
+            String out = "" + a[0];
+            for(int i = 1; i < a.length; i++){
+                out = out + sep + a[i];
+            }
+            return out;
+        }
+        else if(a.length == 1){
+            return "" + a[0];
+        }
+        else{
+            return "";
+        }
     }
     
     /**
