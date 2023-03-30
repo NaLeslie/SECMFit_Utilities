@@ -12,4 +12,4 @@ Utility methods for fitting arbitrary SECM features
 - The comsol compiler has a different name in Unix-based systems (`comsole compile` instead of `comsolcompile`).
 - COMSOL's security preferences need to be updated. In `File>Preferences>Security`:
   - Give COMSOL access to all files (so that you can write to files).
-  - Give COMSOL access to system properties (so that you can find the current working directly).
+  - Give COMSOL access to system properties (so that you can find the current working directory).
