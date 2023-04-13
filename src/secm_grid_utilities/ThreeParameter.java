@@ -1,6 +1,9 @@
 /*
- * SECM_standard.java
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
  */
+package secm_grid_utilities;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -13,10 +16,13 @@ import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Scanner;
 
-/** Model exported on Mar 30 2023, 10:42 by COMSOL 6.1.0.346. */
-public class SECM_standard {
-	
-	/**
+/**
+ *
+ * @author Nathaniel
+ */
+public class ThreeParameter {
+
+    /**
      * Stand-in for auto-generated method
      * @param reactivity_data_filename
      * @param l The L parameter
@@ -38,26 +44,19 @@ public class SECM_standard {
     public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
-		list_gridsum = new LinkedList<Integer>();
+        list_gridsum = new LinkedList<Integer>();
         list_data = new LinkedList<Double[]>();
-        
+        System.out.println(getDateStamp());
         try{
-			String control_file = "montreal_IF.csv";
-			System.out.println(getDateStamp() + " Reading in control file: " + control_file);
-			readSECMInfo(control_file);
-			
-			System.out.println(getDateStamp() + " Finding initial logk");
-			double initial_r = 0;
-			double initial_l = 1.0;
-			double initial_logk = findFirstLogK(initial_l, true);
-			//double initial_logk = -4;
-            System.out.println(getDateStamp() + " Initial logk: " + initial_logk);
-			
-            runFit(control_file, initial_l, initial_logk, initial_r, true);
+            readSECMInfo("C:\\Users\\Malak\\Downloads\\ArbitraryRFs\\Martlet_postmortem\\martlet_IF.csv");
+            double[] xy = getCentre();
+            double amount = -1.2;
+            int[][] newgrid = applyDilationErosion(amount);
+            //exportEditedGrid("C:\\Users\\Malak\\Downloads\\ArbitraryRFs\\Montreal_postmortem\\switches_montreal_I2.csv", newgrid);
+            //runFit("yep", 1.0, -5, false);
         }
         catch(Exception e){
-            System.out.println(e.toString());
-			e.printStackTrace();
+            e.printStackTrace();
         }
     }
     
@@ -121,6 +120,10 @@ public class SECM_standard {
             }
         }
         double[][] lam_DTD = multiply(DTD, lambda);
+        double det = determinant(add(JTJ, lam_DTD));
+        if((!Double.isFinite(det) || det == 0.0)){//ensure JTJ + lambda*DTD is invertible
+            return ERROR_OCCURED;
+        }
         double[][] JTJinv = invert(add(JTJ, lam_DTD));
         double[] delta_c = multiply(multiply(JTJinv, JT), residuals);
         ssr = sumSquare(residuals);
@@ -129,11 +132,10 @@ public class SECM_standard {
         last_l = l;
         last_logk = logk;
         last_r = r;
-		logInitialGuesses(filename, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr);
+        logInitialGuesses(filename, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr);
         l = last_l + round(delta_c[0], L_DECIMALS);
         logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
         r = last_r + round(delta_c[2], R_DECIMALS);
-        
         boolean converged = false;
         int iterations = 1;
         if(verbose){
@@ -146,12 +148,9 @@ public class SECM_standard {
             System.out.println("Lambda 0");
             //First lambda
             curr = runModel(l, logk, r);
-			System.out.println("Calc residuals...");
             residuals = subtract(experimental, curr);
-			System.out.println("Calc ssr...");
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
-			System.out.println("About to log...");
             logIteration(iterations, new double[]{DTD[0][0], DTD[1][1], DTD[2][2]}, lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
 
             //subsequent lambdas (if necessary)
@@ -159,24 +158,27 @@ public class SECM_standard {
                 lambda = nextLambda(lambda);
                 System.out.println("Lambda " + lambda);
                 lam_DTD = multiply(DTD, lambda);
-                JTJinv = invert(add(JTJ, lam_DTD));
-				System.out.println("Calc Dc...");
-                delta_c = multiply(multiply(JTJinv, JT), residuals);
-                l = last_l + round(delta_c[0], L_DECIMALS);
-                logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-                r = last_r + round(delta_c[2], R_DECIMALS);
-                curr = runModel(l, logk, r);
-                residuals = subtract(experimental, curr);
-                ssr = sumSquare(residuals);
-                lambda_ok = ssr < last_ssr;
-                logLambda(lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
-                //if the prescribed changes to the parameters are small enough, declare convergence
-                if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
-                    System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
-                    lambda_ok = true;
-                    converged = true;
-                    return EXECUTED_OK;
+                det = determinant(add(JTJ, lam_DTD));
+                if((Double.isFinite(det) && det != 0.0)){//ensure JTJ + lambda*DTD is invertible
+                    JTJinv = invert(add(JTJ, lam_DTD));
+                    delta_c = multiply(multiply(JTJinv, JT), residuals);
+                    l = last_l + round(delta_c[0], L_DECIMALS);
+                    logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
+                    r = last_r + round(delta_c[2], R_DECIMALS);
+                    curr = runModel(l, logk, r);
+                    residuals = subtract(experimental, curr);
+                    ssr = sumSquare(residuals);
+                    lambda_ok = ssr < last_ssr;
+                    logLambda(lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
+                    //if the prescribed changes to the parameters are small enough, declare convergence
+                    if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
+                        System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
+                        lambda_ok = true;
+                        converged = true;
+                        return EXECUTED_OK;
+                    }
                 }
+                
             }
             //check if the loop ended due to lambda hitting its maximum
             if(!lambda_ok){
@@ -187,7 +189,6 @@ public class SECM_standard {
                 return MAX_ITERATIONS_REACHED;
             }
             //Experimental: (use the set of parameters with the lowest residuals to-date)
-			System.out.println("about to call findLowestSSR...");
             int lowest_sim = findLowestSSR();
             curr = convertToRegularDouble(list_data.get(lowest_sim));
             residuals = subtract(experimental, curr);
@@ -253,16 +254,19 @@ public class SECM_standard {
             }
             lambda = 0;
             lam_DTD = multiply(DTD, lambda);
-            JTJinv = invert(add(JTJ, lam_DTD));
-            delta_c = multiply(multiply(JTJinv, JT), residuals);
-            l = last_l + round(delta_c[0], L_DECIMALS);
-            logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
-            r = last_r + round(delta_c[2], R_DECIMALS);
-            //if the prescribed changes to the parameters are small enough, declare convergence
-            if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
-                System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
-                converged = true;
-                return EXECUTED_OK;
+            det = determinant(add(JTJ, lam_DTD));
+            if((Double.isFinite(det) && det != 0.0)){//ensure JTJ + lambda*DTD is invertible
+                JTJinv = invert(add(JTJ, lam_DTD));
+                delta_c = multiply(multiply(JTJinv, JT), residuals);
+                l = last_l + round(delta_c[0], L_DECIMALS);
+                logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
+                r = last_r + round(delta_c[2], R_DECIMALS);
+                //if the prescribed changes to the parameters are small enough, declare convergence
+                if(Math.abs(delta_c[0]) < 0.5*Math.pow(10, -L_DECIMALS) && Math.abs(delta_c[1]) < 0.5*Math.pow(10, -LOGK_DECIMALS) && Math.abs(delta_c[2]) < 0.5*Math.pow(10, -R_DECIMALS)){
+                    System.out.println("DeltaC: " + delta_c[0] + "\t" + delta_c[1] + "\t" + delta_c[2]);
+                    converged = true;
+                    return EXECUTED_OK;
+                }
             }
         }
         
@@ -288,7 +292,6 @@ public class SECM_standard {
             double[] data = readData();
             eraseDataFile();
             addToList(l, logk, gridcount, data);
-			System.out.println("about to return data.");
             return data;
         }
         else{
@@ -443,14 +446,6 @@ public class SECM_standard {
         return TEST_LOG_K[max_derivative_index];
     }
     
-	static double[] powerOfTen(double[] logs){
-		double[] output = new double[logs.length];
-		for(int i = 0; i < output.length; i++){
-			output[i] = Math.pow(10.0, logs[i]);
-		}
-		return output;
-	}
-	
     /**
      * Method that controls the lambda-escalation policy for the Levenberg-Marquardt algorithm.
      * @param current_lambda The lambda that was just used.
@@ -524,6 +519,14 @@ public class SECM_standard {
             }
         }
         return low_index;
+    }
+    
+    static double[] powerOfTen(double[] logs){
+        double[] output = new double[logs.length];
+        for(int i = 0; i < output.length; i++){
+            output[i] = Math.pow(10.0, logs[i]);
+        }
+        return output;
     }
     
     ////////////////////////////////////////////////////////////////////////////
@@ -620,6 +623,10 @@ public class SECM_standard {
      */
     static final int MAX_LAMBDA_REACHED = 2;
     
+    /**
+     * Indicates that an error occurred that prevented the fit from completing.
+     */
+    static final int ERROR_OCCURED = 3;
     
     /*
     Grid-handling methods and fields
@@ -714,24 +721,23 @@ public class SECM_standard {
         double besty = 0;
         double bestScore = 0;
         
-        for(int sx = 0; sx < sample_xs.length; sx++){
-            int ix = sample_xs[sx] - min_x;
-            for(int sy = 0; sy < sample_ys.length; sy++){
-                int iy = sample_ys[sy] - min_y;
-                double score = 0;
-                for(int x = 0; x < grid.length; x++){
-                    for(int y = 0; y < grid[0].length; y++){
-                        if((x != ix || y != iy) && grid[x][y] == 1){
-                            double distsq = (ix-x)*(ix-x) + (iy-y)*(iy-y);
-                            score += 1.0/distsq;
-                        }
+        for(int s = 0; s < sample_xs.length; s++){
+            int ix = sample_xs[s] - min_x;
+            int iy = sample_ys[s] - min_y;
+            double score = 0;
+            for(int x = 0; x < grid.length; x++){
+                for(int y = 0; y < grid[0].length; y++){
+                    if((x != ix || y != iy) && grid[x][y] == 1){
+                        double distsq = (ix-x)*(ix-x) + (iy-y)*(iy-y);
+                        score += 1.0/distsq;
                     }
                 }
-                if(score > bestScore){
-                    bestx = physical_xs[sx];
-                    besty = physical_ys[sy];
-                    bestScore = score;
-                }
+            }
+            
+            if(score > bestScore){
+                bestx = physical_xs[s];
+                besty = physical_ys[s];
+                bestScore = score;
             }
         }
         return new double[]{bestx, besty};
@@ -1249,7 +1255,7 @@ public class SECM_standard {
                 }
                 else{
                     pw.print(linesplit[3] + "," + linesplit[4] + "," + reactivitymap[x][y]);
-					first = false;
+                    first = false;
                 }
             }
         }
@@ -1263,9 +1269,9 @@ public class SECM_standard {
      * @return The absolute file path of the directory from which this program is executing, ".".
      */
     static String getCWD(){
-		File rmf = new File(reactivity_mapfile);
-		File cwd = rmf.getAbsoluteFile().getParentFile();
-		return cwd.getPath();
+        File rmf = new File(reactivity_mapfile);
+        File cwd = rmf.getAbsoluteFile().getParentFile();
+        return cwd.getPath();
     }
     
     /**
@@ -1828,4 +1834,3 @@ public class SECM_standard {
         pw.close();
     }
 }
-
