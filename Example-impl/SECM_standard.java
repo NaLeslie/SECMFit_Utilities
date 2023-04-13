@@ -759,7 +759,7 @@ public class SECM_standard {
         list_data = new LinkedList<Double[]>();
         
         try{
-			String control_file = "T2S3_true-4.csv";
+			String control_file = "montreal_IF.csv";
 			System.out.println(getDateStamp() + " Reading in control file: " + control_file);
 			readSECMInfo(control_file);
 			
@@ -1889,9 +1889,9 @@ public class SECM_standard {
     static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] dr, double[] residual) throws FileNotFoundException{
         File f = new File(fname);
         PrintWriter pw = new PrintWriter(f);
-            pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], residual [A]");
+            pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], dr [A], residual [A]");
             for(int i = 0; i < x.length; i ++){
-                pw.print("\n" + x[i] + "," + y[i] + "," + current[i] + "," + dl[i] + "," + dlogk[i] + "," + residual[i]);
+                pw.print("\n" + x[i] + "," + y[i] + "," + current[i] + "," + dl[i] + "," + dlogk[i] + "," + dr[i] + "," + residual[i]);
             }
         pw.close();
     }
