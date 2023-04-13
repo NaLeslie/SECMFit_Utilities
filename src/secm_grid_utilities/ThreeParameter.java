@@ -1,9 +1,6 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * SECM_standard.java
  */
-package secm_grid_utilities;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -16,13 +13,10 @@ import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Scanner;
 
-/**
- *
- * @author Nathaniel
- */
-public class ThreeParameter {
-
-    /**
+/** Model exported on Mar 30 2023, 10:42 by COMSOL 6.1.0.346. */
+public class SECM_standard {
+	
+	/**
      * Stand-in for auto-generated method
      * @param reactivity_data_filename
      * @param l The L parameter
@@ -41,23 +35,29 @@ public class ThreeParameter {
     /**
      * @param args the command line arguments
      */
-    public static void main() throws NumberFormatException, FileNotFoundException {
+    public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
+		list_gridsum = new LinkedList<Integer>();
         list_data = new LinkedList<Double[]>();
-        System.out.println(getDateStamp());
+        
         try{
-            readSECMInfo("Fitfile.csv");
-            double amount = -2.0;
-            for(int i = 0; i < 9; i++){
-                int[][] newgrid = applyDilationErosion(amount);
-                exportEditedGrid(i + "_" + amount + ".csv", newgrid);
-                amount += 0.5;
-            }
-            //runFit("yep", 1.0, -5, false);
+			String control_file = "montreal_IF.csv";
+			System.out.println(getDateStamp() + " Reading in control file: " + control_file);
+			readSECMInfo(control_file);
+			
+			System.out.println(getDateStamp() + " Finding initial logk");
+			double initial_r = 0;
+			double initial_l = 1.0;
+			double initial_logk = findFirstLogK(initial_l, true);
+			//double initial_logk = -4;
+            System.out.println(getDateStamp() + " Initial logk: " + initial_logk);
+			
+            runFit(control_file, initial_l, initial_logk, initial_r, true);
         }
         catch(Exception e){
-            e.printStackTrace();
+            System.out.println(e.toString());
+			e.printStackTrace();
         }
     }
     
@@ -129,10 +129,11 @@ public class ThreeParameter {
         last_l = l;
         last_logk = logk;
         last_r = r;
+		logInitialGuesses(filename, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr);
         l = last_l + round(delta_c[0], L_DECIMALS);
         logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
         r = last_r + round(delta_c[2], R_DECIMALS);
-        logInitialGuesses(filename, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr);
+        
         boolean converged = false;
         int iterations = 1;
         if(verbose){
@@ -145,10 +146,13 @@ public class ThreeParameter {
             System.out.println("Lambda 0");
             //First lambda
             curr = runModel(l, logk, r);
+			System.out.println("Calc residuals...");
             residuals = subtract(experimental, curr);
+			System.out.println("Calc ssr...");
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
-            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1]}, lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
+			System.out.println("About to log...");
+            logIteration(iterations, new double[]{DTD[0][0], DTD[1][1], DTD[2][2]}, lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
 
             //subsequent lambdas (if necessary)
             while(!lambda_ok && lambda <= MAX_LAMBDA){
@@ -156,6 +160,7 @@ public class ThreeParameter {
                 System.out.println("Lambda " + lambda);
                 lam_DTD = multiply(DTD, lambda);
                 JTJinv = invert(add(JTJ, lam_DTD));
+				System.out.println("Calc Dc...");
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
@@ -182,6 +187,7 @@ public class ThreeParameter {
                 return MAX_ITERATIONS_REACHED;
             }
             //Experimental: (use the set of parameters with the lowest residuals to-date)
+			System.out.println("about to call findLowestSSR...");
             int lowest_sim = findLowestSSR();
             curr = convertToRegularDouble(list_data.get(lowest_sim));
             residuals = subtract(experimental, curr);
@@ -282,6 +288,7 @@ public class ThreeParameter {
             double[] data = readData();
             eraseDataFile();
             addToList(l, logk, gridcount, data);
+			System.out.println("about to return data.");
             return data;
         }
         else{
@@ -338,7 +345,7 @@ public class ThreeParameter {
     static int checkList(double l, double logk, int gridsum){
         for(int i = 0; i < list_l.size(); i++){
             boolean leq = precisionEquals(l, list_l.get(i), L_DECIMALS);
-            boolean logkeq = precisionEquals(l, list_logk.get(i), LOGK_DECIMALS);
+            boolean logkeq = precisionEquals(logk, list_logk.get(i), LOGK_DECIMALS);
             boolean gseq = list_gridsum.get(i).intValue() == gridsum;
             if(leq && logkeq && gseq){
                 return i;
@@ -417,13 +424,13 @@ public class ThreeParameter {
     static double findFirstLogK(double firstl, boolean verbose) throws FileNotFoundException, IOException{
         //call the run method to produce a current when the electrode is at distance z and GridData.getCentre() relative to the reactive feature.
         writeReactivityFile(grid, 1.0);
-        int[] centre = getCentre();
-        Model model = runk(reactivity_mapfile, TEST_LOG_K, firstl, centre[0], centre[1]);
+        double[] centre = getCentre();
+        Model model = runk(reactivity_mapfile, powerOfTen(TEST_LOG_K), firstl, centre[0], centre[1]);
         double[] curr = readData();
         eraseDataFile();
         double max_derivative = curr[2] - curr[0];
         int max_derivative_index = 1;
-        for(int i = 2; i < TEST_LOG_K.length -1; i++){
+        for(int i = 2; i < TEST_LOG_K.length -2; i++){
             double derivative = curr[i+1]-curr[i-1];
             if(derivative > max_derivative){
                 max_derivative = derivative;
@@ -436,6 +443,14 @@ public class ThreeParameter {
         return TEST_LOG_K[max_derivative_index];
     }
     
+	static double[] powerOfTen(double[] logs){
+		double[] output = new double[logs.length];
+		for(int i = 0; i < output.length; i++){
+			output[i] = Math.pow(10.0, logs[i]);
+		}
+		return output;
+	}
+	
     /**
      * Method that controls the lambda-escalation policy for the Levenberg-Marquardt algorithm.
      * @param current_lambda The lambda that was just used.
@@ -693,10 +708,10 @@ public class ThreeParameter {
      * This is achieved by scoring each point by the sum of the reciprocal distance squared to each of the 'on' pixels.
      * @return The position of the most central sampling point as an array {x, y}.
      */
-    static int[] getCentre(){
+    static double[] getCentre(){
         
-        int bestx = 0;
-        int besty = 0;
+        double bestx = 0;
+        double besty = 0;
         double bestScore = 0;
         
         for(int sx = 0; sx < sample_xs.length; sx++){
@@ -713,13 +728,13 @@ public class ThreeParameter {
                     }
                 }
                 if(score > bestScore){
-                    bestx = sample_xs[sx];
-                    besty = sample_ys[sy];
+                    bestx = physical_xs[sx];
+                    besty = physical_ys[sy];
                     bestScore = score;
                 }
             }
         }
-        return new int[]{bestx, besty};
+        return new double[]{bestx, besty};
     }
     
     /**
@@ -1157,9 +1172,9 @@ public class ThreeParameter {
     static void writeIteration(String fname, double[] x, double[] y, double[] current, double[] dl, double[] dlogk, double[] dr, double[] residual) throws FileNotFoundException{
         File f = new File(fname);
         PrintWriter pw = new PrintWriter(f);
-            pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], residual [A]");
+            pw.print("#x [m], y [m], i [A], dL [A], dlog10k [A], dr [A], residual [A]");
             for(int i = 0; i < x.length; i ++){
-                pw.print("\n" + x[i] + "," + y[i] + "," + current[i] + "," + dl[i] + "," + dlogk[i] + "," + residual[i]);
+                pw.print("\n" + x[i] + "," + y[i] + "," + current[i] + "," + dl[i] + "," + dlogk[i] + "," + dr[i] + "," + residual[i]);
             }
         pw.close();
     }
@@ -1207,7 +1222,6 @@ public class ThreeParameter {
         
         if(s.hasNextLine()){
             String fl = s.nextLine();
-            pw.print(fl);
             if(fl.equalsIgnoreCase("##ENCODING: csv")){
                 sep = ",";
             }
@@ -1235,6 +1249,7 @@ public class ThreeParameter {
                 }
                 else{
                     pw.print(linesplit[3] + "," + linesplit[4] + "," + reactivitymap[x][y]);
+					first = false;
                 }
             }
         }
@@ -1248,7 +1263,9 @@ public class ThreeParameter {
      * @return The absolute file path of the directory from which this program is executing, ".".
      */
     static String getCWD(){
-        return Paths.get(".").toAbsolutePath().normalize().toString();
+		File rmf = new File(reactivity_mapfile);
+		File cwd = rmf.getAbsoluteFile().getParentFile();
+		return cwd.getPath();
     }
     
     /**
@@ -1811,3 +1828,4 @@ public class ThreeParameter {
         pw.close();
     }
 }
+
