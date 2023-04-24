@@ -749,33 +749,31 @@ public class SECM_standard {
     return model;
   }
     
-    /**
-     * @param args the command line arguments
-     */
     public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
-		list_gridsum = new LinkedList<Integer>();
+	list_gridsum = new LinkedList<Integer>();
         list_data = new LinkedList<Double[]>();
+        list_r = new LinkedList<Double>();
         
         try{
-			String control_file = "CONTROL-FILE-NAME";
-			System.out.println(getDateStamp() + " Reading in control file: " + control_file);
-			readSECMInfo(control_file);
+            String control_file = "CONTROL-FILE-NAME";
+            System.out.println(getDateStamp() + " Reading in control file: " + control_file);
+            readSECMInfo(control_file);
 			
-			System.out.println(getDateStamp() + " Finding initial logk");
-			double initial_r = 0;
-			double initial_l = 1.0;
-			double initial_logk = findFirstLogK(initial_l, true);
-			//double initial_logk = -4;
+            System.out.println(getDateStamp() + " Finding initial logk");
+            double initial_r = 0;
+            double initial_l = 1.0;
+            double initial_logk = findFirstLogK(initial_l, true);
+            //double initial_logk = -4;
             System.out.println(getDateStamp() + " Initial logk: " + initial_logk);
 			
             int result = runFit(control_file, initial_l, initial_logk, initial_r, true);
-		logEndCondition(result);
+            logEndCondition(result);
         }
         catch(Exception e){
             System.out.println(e.toString());
-			e.printStackTrace();
+            e.printStackTrace();
         }
     }
     
@@ -864,12 +862,9 @@ public class SECM_standard {
             System.out.println("Lambda 0");
             //First lambda
             curr = runModel(l, logk, r);
-			System.out.println("Calc residuals...");
             residuals = subtract(experimental, curr);
-			System.out.println("Calc ssr...");
             ssr = sumSquare(residuals);
             boolean lambda_ok = ssr < last_ssr;
-			System.out.println("About to log...");
             logIteration(iterations, new double[]{DTD[0][0], DTD[1][1], DTD[2][2]}, lambda, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
 
             //subsequent lambdas (if necessary)
@@ -878,7 +873,6 @@ public class SECM_standard {
                 System.out.println("Lambda " + lambda);
                 lam_DTD = multiply(DTD, lambda);
                 JTJinv = invert(add(JTJ, lam_DTD));
-				System.out.println("Calc Dc...");
                 delta_c = multiply(multiply(JTJinv, JT), residuals);
                 l = last_l + round(delta_c[0], L_DECIMALS);
                 logk = last_logk + round(delta_c[1], LOGK_DECIMALS);
@@ -905,13 +899,13 @@ public class SECM_standard {
                 return MAX_ITERATIONS_REACHED;
             }
             //Experimental: (use the set of parameters with the lowest residuals to-date)
-			System.out.println("about to call findLowestSSR...");
             int lowest_sim = findLowestSSR();
             curr = convertToRegularDouble(list_data.get(lowest_sim));
             residuals = subtract(experimental, curr);
             ssr = sumSquare(residuals);
             l = list_l.get(lowest_sim);
             logk = list_logk.get(lowest_sim);
+            r = list_r.get(lowest_sim);
             //end of Experimental bit
             //update the previous iteration parameters
             last_ssr = ssr;
@@ -1005,8 +999,7 @@ public class SECM_standard {
             Model temp = run(reactivity_mapfile, l, physical_xs, physical_ys);
             double[] data = readData();
             eraseDataFile();
-            addToList(l, logk, gridcount, data);
-			System.out.println("about to return data.");
+            addToList(l, logk, r, gridcount, data);
             return data;
         }
         else{
@@ -1078,15 +1071,17 @@ public class SECM_standard {
      * @param logk The logk parameter.
      * @param data The simulated currents.
      */
-    static void addToList(double l, double logk, int gridsum, double[] data){
+    static void addToList(double l, double logk, double r, int gridsum, double[] data){
         Double dl = l;
         Double dlogk = logk;
+        Double dr = r;
         Integer gsum = gridsum;
         Double[] ddata = convertToClassDouble(data);
         list_l.add(dl);
         list_logk.add(dlogk);
         list_gridsum.add(gsum);
         list_data.add(ddata);
+        list_r.add(dr);
     }
     
     /**
@@ -1313,6 +1308,11 @@ public class SECM_standard {
      * The pixels will turn 'on' or 'off' in a very specific order.
      */
     static LinkedList<Integer> list_gridsum;
+    
+    /**
+     * List for holding r-parameters that have been simulated
+     */
+    static LinkedList<Double> list_r;
     
     /**
      * List for holding the current results for each secm image simulation.
@@ -2546,4 +2546,3 @@ public class SECM_standard {
         pw.close();
     }
 }
-
