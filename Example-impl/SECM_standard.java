@@ -1848,6 +1848,9 @@ public class SECM_standard {
                 }
             }
         s.close();
+	    if(present_index != asize){
+		throw new FileNotFoundException("Expected " + asize + " points. Found: " + present_index + ".");
+	    }
         //second read of the file to get grid_switches[][]
         int[][] grid_switches = new int[max_x - minx + 1][max_y - miny + 1];
         s = new Scanner(f);
