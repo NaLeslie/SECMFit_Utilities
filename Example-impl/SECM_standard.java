@@ -759,7 +759,7 @@ public class SECM_standard {
         list_data = new LinkedList<Double[]>();
         
         try{
-			String control_file = "montreal_IF.csv";
+			String control_file = "CONTROL-FILE-NAME";
 			System.out.println(getDateStamp() + " Reading in control file: " + control_file);
 			readSECMInfo(control_file);
 			
@@ -770,7 +770,8 @@ public class SECM_standard {
 			//double initial_logk = -4;
             System.out.println(getDateStamp() + " Initial logk: " + initial_logk);
 			
-            runFit(control_file, initial_l, initial_logk, initial_r, true);
+            int result = runFit(control_file, initial_l, initial_logk, initial_r, true);
+		logEndCondition(result);
         }
         catch(Exception e){
             System.out.println(e.toString());
