@@ -1634,8 +1634,10 @@ public class SECM_standard {
             switch(condition){
                 case EXECUTED_OK:
                     pw.append("\nPROCESS CONVERGED.");
+		    break;
                 case MAX_ITERATIONS_REACHED:
                     pw.append("\nPROCESS STOPPED PREMATURELY AFTER " + MAX_ITERATIONS + " ITERATIONS.");
+		    break;
                 case MAX_LAMBDA_REACHED:
                     pw.append("\nPROCESS STOPPED DUE TO MAXIMUM LAMBDA BEING REACHED.");
             }
