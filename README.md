@@ -9,7 +9,7 @@ Utility methods for fitting arbitrary SECM features
 ## Operating systems:
 - `/Example-impl/run.bat` will compile and run the simulation on Windows machines.
 - On Windows systems, `C:\Program Files\COMSOL\COMSOL##\Multiphysics\bin\win64` must be added to the `PATH` environment variable.
-- The comsol compiler has a different name in Unix-based systems (`comsole compile` instead of `comsolcompile`).
+- The comsol compiler has a different name in Unix-based systems (`comsol compile` instead of `comsolcompile`).
 - COMSOL's security preferences need to be updated. In `File>Preferences>Security`:
   - Give COMSOL access to all files (so that you can write to files).
   - Give COMSOL access to system properties (so that you can find the current working directory).
