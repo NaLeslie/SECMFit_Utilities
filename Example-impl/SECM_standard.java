@@ -752,20 +752,19 @@ public class SECM_standard {
     public static void main(String[] args) throws NumberFormatException, FileNotFoundException {
         list_l = new LinkedList<Double>();
         list_logk = new LinkedList<Double>();
-	list_gridsum = new LinkedList<Integer>();
+	    list_gridsum = new LinkedList<Integer>();
         list_data = new LinkedList<Double[]>();
         list_r = new LinkedList<Double>();
         
         try{
-            String control_file = "CONTROL-FILE-NAME";
+            String control_file = "arrow_10_50_IF.csv";
             System.out.println(getDateStamp() + " Reading in control file: " + control_file);
             readSECMInfo(control_file);
 			
             System.out.println(getDateStamp() + " Finding initial logk");
             double initial_r = 0;
-            double initial_l = 1.0;
+            double initial_l = 1;
             double initial_logk = findFirstLogK(initial_l, true);
-            //double initial_logk = -4;
             System.out.println(getDateStamp() + " Initial logk: " + initial_logk);
 			
             int result = runFit(control_file, initial_l, initial_logk, initial_r, true);
@@ -900,17 +899,23 @@ public class SECM_standard {
             }
             //Experimental: (use the set of parameters with the lowest residuals to-date)
             int lowest_sim = findLowestSSR();
-            curr = convertToRegularDouble(list_data.get(lowest_sim));
-            residuals = subtract(experimental, curr);
-            ssr = sumSquare(residuals);
-            l = list_l.get(lowest_sim);
-            logk = list_logk.get(lowest_sim);
-            r = list_r.get(lowest_sim);
-            //end of Experimental bit
+			if(lowest_sim < list_l.size() - 1){
+				l = list_l.get(lowest_sim);
+				logk = list_logk.get(lowest_sim);
+				r = list_r.get(lowest_sim);
+				curr = convertToRegularDouble(list_data.get(lowest_sim));
+				residuals = subtract(experimental, curr);
+				ssr = sumSquare(residuals);
+				lambda_ok = true;
+				System.out.println(getDateStamp() + ": found lower: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
+				logLambda(-1, new String[]{"L", "log10k", "dilation/erosion"}, new double[]{l, logk, r}, ssr, lambda_ok);
+            }
+			//end of Experimental bit
             //update the previous iteration parameters
             last_ssr = ssr;
             last_l = l;
             last_logk = logk;
+			last_r = r;
             int[][] de_grid = applyDilationErosion(r);
             int gridcount = getSum(de_grid);
             //compute or look up L derivative
@@ -920,7 +925,7 @@ public class SECM_standard {
                 dl = multiply(subtract(curr_dl, curr), 1.0/L_PERTURB);
             }
             else{
-                curr_dl = convertToRegularDouble(list_data.get(query));
+                curr_dl = runModel(l - L_PERTURB, logk, r);
                 //NOTE: this curr_dl is effectively simulated as being perturbed negatively
                 dl = multiply(subtract(curr_dl, curr), -1.0/L_PERTURB);
             }
@@ -932,7 +937,7 @@ public class SECM_standard {
                 dk = multiply(subtract(curr_dk, curr), 1.0/LOGK_PERTURB);
             }
             else{
-                curr_dk = convertToRegularDouble(list_data.get(query));
+                curr_dk = runModel(l, logk - LOGK_PERTURB, r);
                 //NOTE: this curr_dk is effectively simulated as being perturbed negatively
                 dk = multiply(subtract(curr_dk, curr), -1.0/LOGK_PERTURB);
             }
@@ -946,7 +951,7 @@ public class SECM_standard {
                 dr = multiply(subtract(curr_dr, curr), 1.0/R_PERTURB);
             }
             else{
-                curr_dr = convertToRegularDouble(list_data.get(query));
+                curr_dr = runModel(l, logk, r - R_PERTURB);
                 //NOTE: this curr_dr is effectively simulated as being perturbed negatively
                 dr = multiply(subtract(curr_dr, curr), -1.0/R_PERTURB);
             }
@@ -994,7 +999,7 @@ public class SECM_standard {
         int gridcount = getSum(de_grid);
         int index = checkList(l, logk, gridcount);
         if(index == -1){
-            System.out.println(getDateStamp() + ": simulating: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
+            System.out.println(getDateStamp() + ":  simulating: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
             writeReactivityFile(de_grid, Math.pow(10, logk));
             Model temp = run(reactivity_mapfile, l, physical_xs, physical_ys);
             double[] data = readData();
@@ -1003,7 +1008,7 @@ public class SECM_standard {
             return data;
         }
         else{
-            System.out.println(getDateStamp() + ":     lookup: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
+            System.out.println(getDateStamp() + ":      lookup: L: " + l + "; logk: " + logk + "; erosion/dilation: " + r);
             return convertToRegularDouble(list_data.get(index));
         }
     }
@@ -1286,7 +1291,7 @@ public class SECM_standard {
     /**
      * The perturbation that is made to the R-parameter
      */
-    static final double R_PERTURB = 0.6;//in grid pixels
+    static final double R_PERTURB = 1.5;//in grid pixels
     
     /*
     Lists for storing simulation history (to avoid redundant simulations)
@@ -1583,7 +1588,12 @@ public class SECM_standard {
     static void logLambda(double lambda, String[] labels, double[] params, double ssr, boolean accepted) throws FileNotFoundException, IOException{
         File f = new File(LOGFILE);
         PrintWriter pw = new PrintWriter(new FileWriter(f, true));
-            pw.append("\n\tLAMBDA: " + lambda);
+            if(lambda >= 0){
+				pw.append("\n\tLAMBDA: " + lambda);
+			}
+			else{
+				pw.append("\n\tFound previous simulation with lower SSR");
+			}
             for(int i = 0; i < labels.length; i++){
                 pw.append("\n\t\t" + labels[i] + ": " + params[i]);
             }
@@ -1634,10 +1644,10 @@ public class SECM_standard {
             switch(condition){
                 case EXECUTED_OK:
                     pw.append("\nPROCESS CONVERGED.");
-		    break;
+					break;
                 case MAX_ITERATIONS_REACHED:
                     pw.append("\nPROCESS STOPPED PREMATURELY AFTER " + MAX_ITERATIONS + " ITERATIONS.");
-		    break;
+					break;
                 case MAX_LAMBDA_REACHED:
                     pw.append("\nPROCESS STOPPED DUE TO MAXIMUM LAMBDA BEING REACHED.");
             }
